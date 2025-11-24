@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 
@@ -79,6 +80,7 @@ env/
 penv/
 .venv/
 .env/
+.env
 
 # Spyder project settings
 .spyderproject
@@ -97,3 +99,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Session database
+sessions.db

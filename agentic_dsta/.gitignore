@@ -1,0 +1,9 @@
+# Environments
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Session database
+sessions.db
