@@ -14,20 +14,20 @@ patch = mock.patch
 class TestGoogleAdsUpdater(unittest.TestCase):
 
     @patch.dict(os.environ, {
-        "GOOGLE_ADS_CLIENT_ID": "test_client_id",
-        "GOOGLE_ADS_CLIENT_SECRET": "test_client_secret",
-        "GOOGLE_ADS_REFRESH_TOKEN": "test_refresh_token",
-        "GOOGLE_ADS_DEVELOPER_TOKEN": "test_token",
+        "GOOGLE_ADS_CLIENT_ID": "mock-client-id",
+        "GOOGLE_ADS_CLIENT_SECRET": "mock-client-secret",
+        "GOOGLE_ADS_REFRESH_TOKEN": "mock-refresh-token",
+        "GOOGLE_ADS_DEVELOPER_TOKEN": "mock-developer-token",
     })
     @patch('google.ads.googleads.client.GoogleAdsClient.load_from_dict')
     def test_get_google_ads_client_with_oauth(self, mock_load_from_dict):
         google_ads_updater.get_google_ads_client("12345")
         mock_load_from_dict.assert_called_with({
             "login_customer_id": "12345",
-            "developer_token": "test_token",
-            "client_id": "test_client_id",
-            "client_secret": "test_client_secret",
-            "refresh_token": "test_refresh_token",
+            "developer_token": "mock-developer-token",
+            "client_id": "mock-client-id",
+            "client_secret": "mock-client-secret",
+            "refresh_token": "mock-refresh-token",
             "token_uri": "https://oauth2.googleapis.com/token",
             "use_proto_plus": True,
         })
