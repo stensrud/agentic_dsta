@@ -41,3 +41,12 @@ variable "allow_unauthenticated" {
   type        = bool
   default     = false # Set to true only if it's a public API
 }
+
+variable "secret_env_vars" {
+  description = "Environment variables sourced from Secret Manager secrets. Map key is env var name, value is object with secret name and version."
+  type = map(object({
+    name    = string
+    version = string
+  }))
+  default = {}
+}

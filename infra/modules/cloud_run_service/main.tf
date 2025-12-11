@@ -5,17 +5,39 @@ resource "google_cloud_run_v2_service" "default" {
   location = var.location
   project  = var.project_id
   ingress  = "INGRESS_TRAFFIC_ALL" # Adjust as needed (e.g., INGRESS_TRAFFIC_INTERNAL_ONLY)
-
+  deletion_protection = false
   template {
     containers {
       image = var.image_url
       ports { container_port = var.container_port }
+
+      startup_probe {
+        initial_delay_seconds = 10
+        timeout_seconds       = 10
+        period_seconds        = 10
+        failure_threshold     = 60 # 60 * 10s = 600s = 10 minutes timeout
+        tcp_socket {
+          port = var.container_port
+        }
+      }
 
       dynamic "env" {
         for_each = var.env_vars
         content {
           name  = env.key
           value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.secret_env_vars
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value.name
+              version = env.value.version
+            }
+          }
         }
       }
       # Add resource limits if necessary
@@ -39,25 +61,33 @@ resource "google_cloud_run_v2_service" "default" {
 }
 
 # IAM policy for invoker role
-data "google_iam_policy" "invoker" {
-  binding {
-    role = "roles/run.invoker"
-    members = var.allow_unauthenticated ? ["allUsers"] : [
-      # Add specific service accounts or groups allowed to invoke
-      # Example: "serviceAccount:your-caller-sa@your-project.iam.gserviceaccount.com"
-    ]
-  }
-}
-
-resource "google_cloud_run_service_iam_policy" "invoker" {
-  location    = google_cloud_run_v2_service.default.location
-  project     = google_cloud_run_v2_service.default.project
-  <REDACTED_PII>ame
-  policy_data = data.google_iam_policy.invoker.policy_data
+resource "google_cloud_run_v2_service_iam_member" "invoker_all" {
+  provider = google-beta
+  count    = var.allow_unauthenticated ? 1 : 0
+  project  = google_cloud_run_v2_service.default.project
+  location = google_cloud_run_v2_service.default.location
+  name     = google_cloud_run_v2_service.default.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 
 # Output the URL of the service
 output "service_url" {
   description = "The URL of the deployed Cloud Run service"
   value       = google_cloud_run_v2_service.default.uri
+}
+
+output "name" {
+  description = "The name of the deployed Cloud Run service"
+  value       = google_cloud_run_v2_service.default.name
+}
+
+output "location" {
+  description = "The location of the deployed Cloud Run service"
+  value       = google_cloud_run_v2_service.default.location
+}
+
+output "project_id" {
+  description = "The project id of the deployed Cloud Run service"
+  value       = google_cloud_run_v2_service.default.project
 }
