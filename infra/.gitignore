@@ -1,0 +1,6 @@
+# Terraform files to ignore
+terraform.tfvars
+config.yaml
+.terraform
+*.tfstate
+*.tfstate.backup
