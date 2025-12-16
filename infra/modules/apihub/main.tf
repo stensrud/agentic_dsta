@@ -2,18 +2,14 @@
 resource "google_project_service_identity" "apihub_service_identity" {
   provider = google-beta
   project  = var.project_id
-  service  = "apihub.googleapis.com"
+  service  = var.service_name
 }
 
 # Grant Admin role to service identity
 resource "google_project_iam_member" "apihub_service_identity_permission" {
   provider = google-beta
-  project = var.project_id
-  for_each = toset([
-    "roles/apihub.editor",
-    "roles/apihub.admin",
-    "roles/apihub.runtimeProjectServiceAgent"
-  ])
+  project  = var.project_id
+  for_each = toset(var.service_identity_roles)
   role    = each.key
   member  = "serviceAccount:${google_project_service_identity.apihub_service_identity.email}"
   depends_on = [google_project_service_identity.apihub_service_identity]
@@ -25,19 +21,18 @@ resource "google_project_iam_member" "apihub_service_identity_permission" {
 # are not available in the current provider version, and bash is not available
 # in g3terraform runner for local-exec.
 resource "null_resource" "init_apihub" {
-  triggers = {
+  triggers = merge({
     project_id = var.project_id
     location   = var.location
-    # Trigger re-run if specs change
-    pollen_spec_hash  = filemd5("${var.specs_dir}/pollen-api-openapi.yaml")
-    weather_spec_hash = filemd5("${var.specs_dir}/weather-api-openapi.yaml")
-    air_quality_spec_hash = filemd5("${var.specs_dir}/air-quality-api-openapi.yaml")
-  }
+    }, {
+    for f in var.spec_files :
+    replace(f, ".", "_") => filemd5("${var.specs_dir}/${f}")
+  })
 
   provisioner "local-exec" {
     command = <<EOT
       ACCOUNT_EMAIL='${var.account_email}' ACCESS_TOKEN='${var.access_token}' \
-      sh ${path.module}/../../scripts/init_apihub.sh ${var.project_id} ${var.location} ${var.specs_dir}
+      sh ${path.module}/${var.init_script_path} ${var.project_id} ${var.location} ${var.specs_dir}
     EOT
   }
 

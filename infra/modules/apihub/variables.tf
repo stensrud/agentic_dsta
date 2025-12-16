@@ -28,3 +28,35 @@ variable "access_token" {
   type        = string
   sensitive   = true
 }
+
+variable "service_name" {
+  description = "API Hub service name to enable."
+  type        = string
+  default     = "apihub.googleapis.com"
+}
+
+variable "service_identity_roles" {
+  description = "IAM roles for API Hub service identity."
+  type        = list(string)
+  default = [
+    "roles/apihub.editor",
+    "roles/apihub.admin",
+    "roles/apihub.runtimeProjectServiceAgent"
+  ]
+}
+
+variable "spec_files" {
+  description = "List of OpenAPI spec file names in specs_dir."
+  type        = list(string)
+  default = [
+    "pollen-api-openapi.yaml",
+    "weather-api-openapi.yaml",
+    "air-quality-api-openapi.yaml"
+  ]
+}
+
+variable "init_script_path" {
+  description = "Path to API Hub initialization script."
+  type        = string
+  default     = "../../scripts/init_apihub.sh"
+}

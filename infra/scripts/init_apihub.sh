@@ -8,10 +8,19 @@ SPECS_DIR=$3
 echo "Initializing API Hub in project $PROJECT_ID location $LOCATION"
 echo "Specs dir: $SPECS_DIR"
 
-if [ -z "$ACCOUNT_EMAIL" ] || [ -z "$ACCESS_TOKEN" ]; then
-  echo "Error: ACCOUNT_EMAIL and ACCESS_TOKEN environment variables must be set."
+if [ -z "$ACCOUNT_EMAIL" ]; then
+  echo "Error: ACCOUNT_EMAIL environment variables must be set."
   exit 1
 fi
+
+
+if [ -z "$ACCESS_TOKEN" ]; then
+  echo "Error: Failed to retrieve access token for $ACCOUNT_EMAIL."
+  exit 1
+fi
+
+# Source variables
+. "$(dirname "$0")/apihub_vars.sh"
 
 API_HUB_URL="https://apihub.googleapis.com/v1/projects/$PROJECT_ID/locations/$LOCATION"
 
@@ -60,21 +69,21 @@ create_spec() {
 
   content_b64=$(base64 -w 0 < "$spec_file")
 
-  SPEC_TYPE_ATTR_NAME="projects/$PROJECT_ID/locations/$LOCATION/attributes/apihub-spec-type"
+  SPEC_TYPE_ATTR_NAME="projects/$PROJECT_ID/locations/$LOCATION/attributes/$SPEC_TYPE_ATTRIBUTE_ID"
 
   # JSON payload for creating the spec
   JSON_PAYLOAD=$(cat <<EOF
 {
-  "displayName": "OpenAPI Spec for $api_id",
+  "displayName": "$SPEC_DISPLAY_NAME_PREFIX $api_id",
   "specType": {
     "attribute": "$SPEC_TYPE_ATTR_NAME",
     "enumValues": {
-      "values": [{"id": "openapi"}]
+      "values": [{"id": "$SPEC_TYPE_ID"}]
     }
   },
   "contents": {
     "contents": "$content_b64",
-    "mimeType": "application/vnd.oai.openapi+yaml"
+    "mimeType": "$SPEC_MIME_TYPE"
   }
 }
 EOF
@@ -90,18 +99,18 @@ EOF
 }
 
 # Pollen API
-create_api "pollen-api" "Google Pollen API"
-create_version "pollen-api" "1-0-0" "Version 1.0.0"
-create_spec "pollen-api" "1-0-0" "openapi-spec" "$SPECS_DIR/pollen-api-openapi.yaml"
+create_api "$POLLEN_API_ID" "$POLLEN_API_DISPLAY_NAME"
+create_version "$POLLEN_API_ID" "$API_VERSION_ID" "$API_VERSION_DISPLAY_NAME"
+create_spec "$POLLEN_API_ID" "$API_VERSION_ID" "$API_SPEC_ID" "$SPECS_DIR/$POLLEN_API_SPEC_FILE"
 
 # Weather API
-create_api "weather-api" "Google Weather API"
-create_version "weather-api" "1-0-0" "Version 1.0.0"
-create_spec "weather-api" "1-0-0" "openapi-spec" "$SPECS_DIR/weather-api-openapi.yaml"
+create_api "$WEATHER_API_ID" "$WEATHER_API_DISPLAY_NAME"
+create_version "$WEATHER_API_ID" "$API_VERSION_ID" "$API_VERSION_DISPLAY_NAME"
+create_spec "$WEATHER_API_ID" "$API_VERSION_ID" "$API_SPEC_ID" "$SPECS_DIR/$WEATHER_API_SPEC_FILE"
 
 # Air Quality API
-create_api "air-quality-api" "Google Air Quality API"
-create_version "air-quality-api" "1-0-0" "Version 1.0.0"
-create_spec "air-quality-api" "1-0-0" "openapi-spec" "$SPECS_DIR/air-quality-api-openapi.yaml"
+create_api "$AIR_QUALITY_API_ID" "$AIR_QUALITY_API_DISPLAY_NAME"
+create_version "$AIR_QUALITY_API_ID" "$API_VERSION_ID" "$API_VERSION_DISPLAY_NAME"
+create_spec "$AIR_QUALITY_API_ID" "$API_VERSION_ID" "$API_SPEC_ID" "$SPECS_DIR/$AIR_QUALITY_API_SPEC_FILE"
 
 echo "API Hub initialization complete."

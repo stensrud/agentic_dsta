@@ -10,40 +10,21 @@ provider "google-beta" {
 
 # Enable required APIs for the project
 resource "google_project_service" "apis" {
-  for_each = toset([
-    "run.googleapis.com",
-    "artifactregistry.googleapis.com",
-    "cloudbuild.googleapis.com",
-    "iamcredentials.googleapis.com",
-    "compute.googleapis.com",
-    "secretmanager.googleapis.com",
-    "firestore.googleapis.com",
-    "apihub.googleapis.com",
-    "aiplatform.googleapis.com",
-    "iap.googleapis.com",
-    "googleads.googleapis.com",
-    "pollen.googleapis.com",
-    "weather.googleapis.com",
-  ])
+  for_each           = toset(var.gcp_apis)
   service            = each.key
   disable_on_destroy = false
 }
 
 # Service Account for Cloud Run
 resource "google_service_account" "run_sa" {
-  account_id   = "agentic-dsta-runner"
-  display_name = "Agentic DSTA Cloud Run Runner"
+  account_id   = var.run_sa_account_id
+  display_name = var.run_sa_display_name
   project      = var.project_id
 }
 
 # IAM roles for Service Account
 resource "google_project_iam_member" "run_sa_roles" {
-  for_each = toset([
-    "roles/datastore.user",
-    "roles/apihub.editor",
-    "roles/aiplatform.user",
-    "roles/secretmanager.secretAccessor",
-  ])
+  for_each = toset(var.run_sa_roles)
   project = var.project_id
   role    = each.key
   member  = "serviceAccount:${google_service_account.run_sa.email}"
@@ -82,8 +63,10 @@ module "apihub" {
   source          = "./modules/apihub"
   project_id      = var.project_id
   location        = var.region # This is the regional location for the instance itself
-  specs_dir       = "${path.module}/specs"
+  specs_dir       = "${path.module}/${var.apihub_specs_dir}"
   vertex_location = var.apihub_vertex_location
+  account_email   = var.account_email
+  access_token    = var.access_token
 
   depends_on = [google_project_service.apis]
 }
@@ -119,8 +102,8 @@ module "artifact_registry" {
   project_id    = var.project_id
   location      = var.region
   repository_id = var.artifact_repository_id
-  description   = "Docker repository for Agentic DSTA"
-  format        = "DOCKER"
+  description   = var.artifact_repository_description
+  format        = var.artifact_repository_format
 
   depends_on = [google_project_service.apis]
 }
@@ -130,16 +113,15 @@ module "cloud_run_service" {
   service_name          = var.service_name
   project_id            = var.project_id
   location              = var.location != "" ? var.location : var.region
-  image_url             = var.image_url != "" ? var.image_url : "gcr.io/cloudrun/hello"
+  image_url             = var.image_url != "" ? var.image_url : var.run_service_default_image_url
   container_port        = var.container_port
   allow_unauthenticated = var.allow_unauthenticated
   service_account_email = google_service_account.run_sa.email
 
-  env_vars = {
-    GOOGLE_CLOUD_PROJECT       = var.project_id
-    GOOGLE_CLOUD_LOCATION      = var.region
-    GOOGLE_GENAI_USE_VERTEXAI  = "True"
-  }
+  env_vars = merge(var.run_service_env_vars, {
+    GOOGLE_CLOUD_PROJECT = var.project_id
+    GOOGLE_CLOUD_LOCATION = var.region
+  })
   secret_env_vars = {
     GOOGLE_API_KEY = {
       name    = module.secret_manager.secret_ids["GOOGLE_API_KEY"],
@@ -175,50 +157,120 @@ module "cloud_run_service" {
 
 # Service Account for Scheduler
 resource "google_service_account" "scheduler_sa" {
-  account_id   = "dsta-scheduler"
-  display_name = "DSTA Scheduler SA"
+  account_id   = var.scheduler_sa_account_id
+  display_name = var.scheduler_sa_display_name
   project      = var.project_id
 }
 
-# # Grant scheduler SA permission to invoke cloud run service
-# resource "google_cloud_run_v2_service_iam_member" "scheduler_invoker" {
-#   provider = google-beta
-#   project  = module.cloud_run_service.project_id
-#   location = module.cloud_run_service.location
-#   name     = module.cloud_run_service.name
-#   role     = "roles/run.invoker"
-#   member   = "serviceAccount:${google_service_account.scheduler_sa.email}"
-# }
+# Service Account for agentic-dsta-sa
+data "google_service_account" "agentic_dsta_sa" {
+  account_id = var.agentic_dsta_sa_account_id
+  project    = var.project_id
+}
 
-# # Scheduler job to trigger agent daily
-# resource "google_cloud_scheduler_job" "dsta_automation" {
-#   project     = var.project_id
-#   region      = var.region
-#   name        = "dsta-daily-automation"
-#   description = "Daily trigger for DSTA marketing automation agent"
-#   schedule    = var.scheduler_cron
-#   time_zone   = "UTC"
+# Grant agentic-dsta-sa SA permission to invoke cloud run service
+resource "google_cloud_run_v2_service_iam_member" "agentic_dsta_sa_invoker" {
+  provider = google-beta
+  project  = module.cloud_run_service.project_id
+  location = module.cloud_run_service.location
+  name     = module.cloud_run_service.name
+  role     = var.run_invoker_role
+  member   = "serviceAccount:${data.google_service_account.agentic_dsta_sa.email}"
+}
 
-#   http_target {
-#     http_method = "POST"
-#     uri         = "${module.cloud_run_service.service_url}/sessions"
-#     body = base64encode(jsonencode({
-#       agent_name = "marketing_campaign_manager",
-#       query      = "Run daily check based on current demand signals and business rules."
-#     }))
-#     headers = {
-#       "Content-Type" = "application/json"
-#     }
+locals {
+  session_id = "session-${timestamp()}"
+}
 
-#     oidc_token {
-#       service_account_email = google_service_account.scheduler_sa.email
-#       audience              = module.cloud_run_service.service_url
-#     }
-#   }
+# Scheduler job for sa-session-init-job
+resource "google_cloud_scheduler_job" "sa_session_init_job" {
+  project          = var.project_id
+  region           = var.region
+  name             = var.sa_session_init_scheduler_job_name
+  description      = var.sa_session_init_scheduler_job_description
+  schedule         = var.sa_session_init_scheduler_job_schedule
+  time_zone        = var.sa_session_init_scheduler_job_timezone
+  attempt_deadline = var.sa_session_init_scheduler_job_attempt_deadline
 
-#   depends_on = [google_cloud_run_v2_service_iam_member.scheduler_invoker]
-# }
-# Add this to the end of infra/main.tf
+  retry_config {
+    retry_count          = 0
+    max_retry_duration   = "0s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "3600s"
+    max_doublings        = 5
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.cloud_run_service.service_url}/run_sse"
+    body = base64encode(jsonencode({
+      app_name = "decision_agent"
+      user_id  = data.google_service_account.agentic_dsta_sa.email
+      session_id = local.session_id
+      new_message = {
+        role  = "user"
+        parts = [{ text = var.scheduler_new_message_text }]
+      }
+      streaming = false
+    }))
+    headers = {
+      "Content-Type" = "application/json"
+      "User-Agent"   = "Google-Cloud-Scheduler"
+    }
+
+    oidc_token {
+      service_account_email = data.google_service_account.agentic_dsta_sa.email
+      audience              = "${module.cloud_run_service.service_url}/run_sse"
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_service_iam_member.agentic_dsta_sa_invoker]
+}
+
+# Scheduler job for sa-run-sse-job
+resource "google_cloud_scheduler_job" "sa_run_sse_job" {
+  project          = var.project_id
+  region           = var.region
+  name             = var.sa_run_sse_scheduler_job_name
+  description      = var.sa_run_sse_scheduler_job_description
+  schedule         = var.sa_run_sse_scheduler_job_schedule
+  time_zone        = var.sa_run_sse_scheduler_job_timezone
+  attempt_deadline = var.sa_run_sse_scheduler_job_attempt_deadline
+
+  retry_config {
+    retry_count          = 0
+    max_retry_duration   = "0s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "3600s"
+    max_doublings        = 5
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.cloud_run_service.service_url}/run_sse"
+    body = base64encode(jsonencode({
+      app_name = "decision_agent"
+      user_id  = data.google_service_account.agentic_dsta_sa.email
+      session_id = local.session_id
+      new_message = {
+        role  = "user"
+        parts = [{ text = var.scheduler_new_message_text }]
+      }
+      streaming = false
+    }))
+    headers = {
+      "Content-Type" = "application/json"
+      "User-Agent"   = "Google-Cloud-Scheduler"
+    }
+
+    oidc_token {
+      service_account_email = data.google_service_account.agentic_dsta_sa.email
+      audience              = "${module.cloud_run_service.service_url}/run_sse"
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_service_iam_member.agentic_dsta_sa_invoker]
+}
 
 output "debug_root_secrets_keys" {
   description = "Keys of the map constructed for secret_manager input"
@@ -248,3 +300,19 @@ output "debug_root_var_google_ads_developer_token_is_null" {
 
 # Add similar _is_null checks for the other 5 secret vars if you want to be exhaustive,
 # making sure to include sensitive = true for each.
+
+# --- Scheduler Verification Outputs ---
+output "scheduler_target_uri" {
+  description = "The target URI being used for scheduler jobs"
+  value       = "${module.cloud_run_service.service_url}/run_sse"
+}
+
+output "scheduler_oidc_service_account" {
+  description = "The service account email being used for scheduler OIDC tokens"
+  value       = data.google_service_account.agentic_dsta_sa.email
+}
+
+output "scheduler_session_id" {
+  description = "The dynamic session ID being used for scheduler jobs"
+  value       = local.session_id
+}
