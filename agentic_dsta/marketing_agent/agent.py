@@ -20,8 +20,10 @@ from firestore_agent.tools.firestore_toolset import FirestoreToolset
 from google.adk import agents
 
 
+import os
+
 # The root_agent definition for the marketing_agent.
-model = "gemini-2.0-flash"
+model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 root_agent = agents.LlmAgent(
     instruction="""
       You are a Marketing Campaign Manager responsible for deciding marketing campaign actions based on data from ApiHub, Firestore.

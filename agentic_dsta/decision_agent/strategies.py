@@ -63,7 +63,6 @@ def fetch_instructions_from_firestore(
         content=types.Content(role="model", parts=[types.Part(text=error_message)])
     )
 
-  print(f"Fetched instructions for customer {customer_id}: {fetched_instruction}")
 
   # Step 4: Modify the system instruction in the LlmRequest
   original_instruction = (
@@ -78,13 +77,10 @@ def fetch_instructions_from_firestore(
 
   base_instruction = original_instruction.parts[0].text or ""
   # Prepend the fetched instructions to the original system instruction
-  modified_instruction = (
-      f"{fetched_instruction}"
-  )
-  print(f"Modified system instruction: {modified_instruction}")
+  modified_instruction = fetched_instruction
+
 
   original_instruction.parts[0].text = modified_instruction
   llm_request.config.system_instruction = original_instruction
-  print(f"Modified system instruction: {llm_request.config.system_instruction}")
   # Step 5: Return None to allow the modified request to proceed to the LLM
-  return None
+  return

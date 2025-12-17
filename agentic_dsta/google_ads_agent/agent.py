@@ -17,8 +17,10 @@ from google.adk import agents
 from .tools.google_ads_getter import GoogleAdsGetterToolset
 from .tools.google_ads_updater import GoogleAdsUpdaterToolset
 
+import os
+
 # The root_agent definition for the decision_agent.
-model = "gemini-2.0-flash"
+model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 root_agent = agents.LlmAgent(
     instruction="""
       You are a Google Ads Campaign Manager responsible for managing Google Ads campaigns.

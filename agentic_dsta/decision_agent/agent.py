@@ -13,6 +13,7 @@
 # limitations under the License.
 """Decision agent for managing marketing campaigns."""
 
+import os
 from api_hub_agent.tools.apihub_toolset import DynamicMultiAPIToolset
 from firestore_agent.tools.firestore_toolset import FirestoreToolset
 from google.adk import agents
@@ -23,7 +24,7 @@ from .strategies import fetch_instructions_from_firestore
 
 
 # The root_agent definition for the marketing_agent.
-model = "gemini-2.0-flash"
+model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 tools = [
     GoogleAdsGetterToolset(),
     GoogleAdsUpdaterToolset(),

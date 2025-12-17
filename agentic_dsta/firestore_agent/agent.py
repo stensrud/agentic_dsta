@@ -16,8 +16,10 @@
 from google.adk import agents
 from .tools.firestore_toolset import FirestoreToolset
 
+import os
+
 # The root_agent definition for the firestore_agent.
-model = "gemini-2.0-flash"
+model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 root_agent = agents.LlmAgent(
     instruction="""
       You are a Firestore database management assistant with full access to Google Cloud Firestore.
