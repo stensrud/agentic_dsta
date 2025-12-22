@@ -15,15 +15,13 @@ resource "google_project_service" "apis" {
   disable_on_destroy = false
 }
 
+
 locals {
   service_name                       = "${var.resource_prefix}-app"
   run_sa_account_id                  = "${var.resource_prefix}-runner"
-  storage_bucket_name                = "${var.resource_prefix}-bucket"
-  scheduler_sa_account_id            = "${var.resource_prefix}-scheduler"
   firestore_database_name            = "${var.resource_prefix}-firestore"
   artifact_repository_id             = "${var.resource_prefix}-repo"
-  agentic_dsta_sa_account_id         = "${var.resource_prefix}-sa"
-  dsta_automation_scheduler_job_name = "${var.resource_prefix}-daily-automation"
+  storage_bucket_name                = "${var.resource_prefix}-bucket"
   sa_session_init_scheduler_job_name = "${var.resource_prefix}-sa-session-init-job"
   sa_run_sse_scheduler_job_name      = "${var.resource_prefix}-sa-run-sse-job"
 }
@@ -60,6 +58,7 @@ module "secret_manager" {
   project_id            = var.project_id
   service_account_email = google_service_account.run_sa.email
   additional_secrets    = var.additional_secrets
+  secret_values         = var.secret_values
 
   depends_on = [google_project_service.apis]
 }
@@ -69,38 +68,41 @@ module "apihub" {
   project_id      = var.project_id
   location        = var.region # This is the regional location for the instance itself
   specs_dir       = "${path.module}/${var.apihub_specs_dir}"
-  vertex_location = var.region
-  account_email   = var.account_email
-  access_token    = var.access_token
+  vertex_location = var.apihub_vertex_location
+  account_email   = google_service_account.run_sa.email
+  access_token    = var.access_token # This is the access token for the service account to initialize API Hub
 
   depends_on = [google_project_service.apis]
 }
 
-module "storage" {
-  source     = "./modules/storage"
-  project_id = var.project_id
-  buckets = {
-    "${local.storage_bucket_name}-${var.project_id}" = {
-      location                    = "US"
-      storage_class               = "STANDARD"
-      force_destroy               = false
-      uniform_bucket_level_access = true
-      public_access_prevention    = "enforced"
-      retention_duration_seconds  = 604800
-      labels                      = {}
-    },
-    # Using the manually created bucket name without project ID suffix
-    "${var.resource_prefix}-tf-state" = {
-      location                    = "US"
-      storage_class               = "STANDARD"
-      force_destroy               = false
-      uniform_bucket_level_access = false
-      public_access_prevention    = "inherited"
-      retention_duration_seconds  = 604800
-      labels                      = {}
-    }
-  }
-}
+/*
+ # Module for creating Google Cloud Storage buckets
+ module "storage" {
+   source     = "./modules/storage"
+   project_id = var.project_id
+   buckets = {
+     "${local.storage_bucket_name}-${var.project_id}" = {
+       location                    = "US"
+       storage_class               = "STANDARD"
+       force_destroy               = false
+       uniform_bucket_level_access = true
+       public_access_prevention    = "enforced"
+       retention_duration_seconds  = 604800
+       labels                      = {}
+     },
+     # Using the manually created bucket name without project ID suffix
+     "${var.resource_prefix}-tf-state" = {
+       location                    = "US"
+       storage_class               = "STANDARD"
+       force_destroy               = false
+       uniform_bucket_level_access = false
+       public_access_prevention    = "inherited"
+       retention_duration_seconds  = 604800
+       labels                      = {}
+     }
+   }
+ }
+*/
 
 module "artifact_registry" {
   source        = "./modules/artifact_registry"
@@ -131,29 +133,7 @@ module "cloud_run_service" {
   depends_on = [google_project_service.apis, module.secret_manager]
 }
 
-# Service Account for Scheduler
-resource "google_service_account" "scheduler_sa" {
-  project      = var.project_id
-  account_id   = local.scheduler_sa_account_id
-  display_name = var.scheduler_sa_display_name
-}
 
-# Service Account for agentic-dsta-sa
-resource "google_service_account" "agentic_dsta_sa" {
-  project      = var.project_id
-  account_id   = local.agentic_dsta_sa_account_id
-  display_name = "Agentic DSTA Scheduler Invoker SA"
-}
-
-# Grant agentic-dsta-sa SA permission to invoke cloud run service
-resource "google_cloud_run_v2_service_iam_member" "agentic_dsta_sa_invoker" {
-  provider = google-beta
-  project  = module.cloud_run_service.project_id
-  location = module.cloud_run_service.location
-  name     = module.cloud_run_service.name
-  role     = var.run_invoker_role
-  member   = "serviceAccount:${google_service_account.agentic_dsta_sa.email}"
-}
 
 locals {
   session_id = "session-${timestamp()}"
@@ -179,10 +159,10 @@ resource "google_cloud_scheduler_job" "sa_session_init_job" {
 
   http_target {
     http_method = "POST"
-    uri         = "${module.cloud_run_service.service_url}/run_sse"
+    uri         = "${module.cloud_run_service.service_url}/apps/decision_agent/users/${google_service_account.run_sa.email}/sessions"
     body = base64encode(jsonencode({
       app_name = "decision_agent"
-      user_id  = google_service_account.agentic_dsta_sa.email
+      user_id  = google_service_account.run_sa.email
       session_id = local.session_id
       new_message = {
         role  = "user"
@@ -196,12 +176,10 @@ resource "google_cloud_scheduler_job" "sa_session_init_job" {
     }
 
     oidc_token {
-      service_account_email = google_service_account.agentic_dsta_sa.email
-      audience              = "${module.cloud_run_service.service_url}/run_sse"
+      service_account_email = google_service_account.run_sa.email
+      audience              = "${module.cloud_run_service.service_url}/apps/decision_agent/users/${google_service_account.run_sa.email}/sessions"
     }
   }
-
-  depends_on = [google_cloud_run_v2_service_iam_member.agentic_dsta_sa_invoker]
 }
 
 # Scheduler job for sa-run-sse-job
@@ -227,7 +205,7 @@ resource "google_cloud_scheduler_job" "sa_run_sse_job" {
     uri         = "${module.cloud_run_service.service_url}/run_sse"
     body = base64encode(jsonencode({
       app_name = "decision_agent"
-      user_id  = google_service_account.agentic_dsta_sa.email
+      user_id  = google_service_account.run_sa.email
       session_id = local.session_id
       new_message = {
         role  = "user"
@@ -241,12 +219,10 @@ resource "google_cloud_scheduler_job" "sa_run_sse_job" {
     }
 
     oidc_token {
-      service_account_email = google_service_account.agentic_dsta_sa.email
-      audience              = "${module.cloud_run_service.service_url}/run_sse"
+      service_account_email = google_service_account.run_sa.email
+      audience              ="${module.cloud_run_service.service_url}/run_sse"
     }
   }
-
-  depends_on = [google_cloud_run_v2_service_iam_member.agentic_dsta_sa_invoker]
 }
 
 
@@ -259,7 +235,7 @@ output "scheduler_target_uri" {
 
 output "scheduler_oidc_service_account" {
   description = "The service account email being used for scheduler OIDC tokens"
-  value       = google_service_account.agentic_dsta_sa.email
+  value       = google_service_account.run_sa.email
 }
 
 output "scheduler_session_id" {

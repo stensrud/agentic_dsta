@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Google Air Quality API
+  title: Google Air Quality API test
   description: API for retrieving air quality forecast data
   version: 1.0.0
 servers:

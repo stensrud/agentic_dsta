@@ -1,8 +1,18 @@
 #!/bin/bash
 set -e
+set -x
 
 # Change to the script's directory to ensure relative paths are correct.
 cd "$(dirname "$0")"
+
+# --- Cleanup ---
+# This function is called when the script exits (normally or on error)
+# to ensure the gcloud impersonation setting is always removed.
+cleanup() {
+  echo "--- Cleaning up authentication settings ---"
+  gcloud config unset auth/impersonate_service_account >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 # --- Configuration ---
 CONFIG_FILE="config.yaml"
@@ -13,30 +23,6 @@ TFVARS_GEN_SCRIPT="./scripts/generate_tfvars.py"
 # --- Functions ---
 function get_config_value() {
   python3 -c "import yaml; print(yaml.safe_load(open('$1'))['$2'])"
-}
-
-function create_secret_if_not_exists() {
-  local secret_name="$1"
-  local project_id="$2"
-
-  if ! gcloud secrets describe "$secret_name" --project="$project_id" &>/dev/null; then
-    echo "   Secret '$secret_name' not found. Please provide the value."
-    echo -n "Enter value for $secret_name: "
-    read -s secret_value
-    echo
-    if [ -z "$secret_value" ]; then
-      echo "Error: Value cannot be empty."
-      exit 1
-    fi
-    # Create the secret and pipe the value to its first version
-    echo "$secret_value" | gcloud secrets create "$secret_name" \
-      --project="$project_id" \
-      --data-file=- \
-      --replication-policy=automatic
-    echo "   ✓ Secret '$secret_name' created successfully."
-  else
-    echo "   ✓ Secret '$secret_name' already exists."
-  fi
 }
 
 # --- Main Script ---
@@ -71,7 +57,8 @@ ADDITIONAL_SECRETS=$(python3 -c "import yaml; print(' '.join(yaml.safe_load(open
 
 # --- Derived Resource Names ---
 SA_NAME="${RESOURCE_PREFIX}-deployer"
-TF_STATE_BUCKET="${RESOURCE_PREFIX}-tf-state"
+# Append the project ID to the bucket name to ensure global uniqueness.
+TF_STATE_BUCKET="agentic-dsta-tf-state-${PROJECT_ID}"
 IMAGE_NAME="${RESOURCE_PREFIX}-image"
 REPO_NAME="${RESOURCE_PREFIX}-repo"
 TAG="latest"
@@ -82,45 +69,38 @@ if [ -z "$PROJECT_ID" ] || [ -z "$REGION" ] || [ -z "$RESOURCE_PREFIX" ]; then
   exit 1
 fi
 
-# 2a. Ensure Secrets Exist in Secret Manager
-echo "--- Checking for secrets in Secret Manager ---"
-SECRETS_TO_CHECK=(
-  "GOOGLE_API_KEY"
-  "GOOGLE_ADS_DEVELOPER_TOKEN"
-  "GOOGLE_ADS_CLIENT_ID"
-  "GOOGLE_ADS_CLIENT_SECRET"
-  "GOOGLE_ADS_REFRESH_TOKEN"
-  "GOOGLE_POLLEN_API_KEY"
-  "GOOGLE_WEATHER_API_KEY"
-)
-# Add any user-defined secrets from the config file
-if [ -n "$ADDITIONAL_SECRETS" ]; then
-  SECRETS_TO_CHECK+=($ADDITIONAL_SECRETS)
-fi
-
-for secret in "${SECRETS_TO_CHECK[@]}"; do
-  create_secret_if_not_exists "$secret" "$PROJECT_ID"
-done
-echo "✅ All required secrets are present in Secret Manager."
-
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+echo "Configuration:"
+echo $SA_NAME
+echo $TF_STATE_BUCKET
+echo $IMAGE_NAME
+echo $REPO_NAME
+echo $TAG
+echo $IMAGE_URL
 
 # 3. Set up Service Account for deployment
 echo "--- Ensuring deployment Service Account '$SA_NAME' exists and has permissions ---"
 
-if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" &>/dev/null; then
-  echo "   Creating Service Account: $SA_NAME"
+# Use a more robust check for the service account's existence
+SA_DESCRIPTION_OUTPUT=$(gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" 2>&1 || true)
+if [[ "$SA_DESCRIPTION_OUTPUT" == *"NOT_FOUND"* ]]; then
+  echo "   Service Account '$SA_NAME' not found. Creating it..."
   gcloud iam service-accounts create "$SA_NAME" \
     --display-name="Agentic DSTA Deployer" \
     --project="$PROJECT_ID"
   # Add a delay to allow the service account to propagate
   echo "   Waiting for 10 seconds for the service account to propagate..."
   sleep 10
+elif [[ "$SA_DESCRIPTION_OUTPUT" == *"ERROR"* ]]; then
+  # A different error occurred (e.g., permission denied)
+  echo "   Error checking for Service Account '$SA_NAME'."
+  echo "   This may be due to a lack of 'iam.serviceAccounts.get' permission."
+  echo "   gcloud output:"
+  echo "$SA_DESCRIPTION_OUTPUT"
+  exit 1
 else
   echo "   Service Account '$SA_NAME' already exists."
 fi
-
-gcloud config unset auth/impersonate_service_account
 
 ROLES=(
   "roles/viewer"
@@ -135,19 +115,48 @@ ROLES=(
   "roles/cloudscheduler.admin"
   "roles/firebase.admin"
   "roles/resourcemanager.projectIamAdmin"
+  "roles/iam.serviceAccountAdmin"
+  "roles/apihub.admin"
 )
 
 for role in "${ROLES[@]}"; do
-  echo "   Applying project-level role: $role"
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$SA_EMAIL" \
-    --role="$role" \
-    --condition=None > /dev/null
+  # Check if the policy binding already exists
+  if gcloud projects get-iam-policy "$PROJECT_ID" --format="json" | \
+    python3 -c "import sys, json; policy = json.load(sys.stdin); print(any(b['role'] == '$role' and 'serviceAccount:$SA_EMAIL' in b.get('members', []) for b in policy.get('bindings', [])))" | \
+    grep -q "True"; then
+    echo "   Project-level role for SA already exists: $role"
+  else
+    echo "   Applying project-level role for SA: $role"
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+      --member="serviceAccount:$SA_EMAIL" \
+      --role="$role" \
+      --condition=None > /dev/null
+  fi
 done
 
-# Add a delay to allow IAM permissions to propagate
-echo "   Waiting for 10 seconds for IAM permissions to propagate..."
-sleep 10
+# Add a longer delay to allow IAM permissions to propagate. This is crucial
+# to prevent race conditions where Terraform runs before the new permissions are effective.
+echo "   Waiting for 30 seconds for IAM permissions to propagate..."
+sleep 30
+
+# Grant the default Compute Engine service account the ability to read from GCS,
+# which is required by Cloud Build to fetch the source code.
+echo "   Granting Cloud Build worker permission to read source code..."
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
+GCE_DEFAULT_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+GCE_ROLE="roles/storage.objectViewer"
+
+if gcloud projects get-iam-policy "$PROJECT_ID" --format="json" | \
+  python3 -c "import sys, json; policy = json.load(sys.stdin); print(any(b['role'] == '$GCE_ROLE' and 'serviceAccount:$GCE_DEFAULT_SA' in b.get('members', []) for b in policy.get('bindings', [])))" | \
+  grep -q "True"; then
+  echo "   Project-level role for GCE SA already exists: $GCE_ROLE"
+else
+  echo "   Applying project-level role for GCE SA: $GCE_ROLE"
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$GCE_DEFAULT_SA" \
+    --role="$GCE_ROLE" \
+    --condition=None > /dev/null
+fi
 
 RUNNER_USER=$(gcloud config get-value account)
 if [ -z "$RUNNER_USER" ]; then
@@ -155,10 +164,31 @@ if [ -z "$RUNNER_USER" ]; then
   exit 1
 fi
 echo "   Granting permissions to '$RUNNER_USER' on '$SA_NAME' for impersonation"
-gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
-  --member="user:$RUNNER_USER" \
-  --role="roles/iam.serviceAccountUser" \
-  --project="$PROJECT_ID" > /dev/null
+# To grant multiple roles, add them to this array.
+USER_ROLES_ON_SA=(
+  "roles/iam.serviceAccountUser"
+  "roles/iam.serviceAccountTokenCreator"
+  "roles/iam.serviceAccountAdmin"
+)
+
+for role in "${USER_ROLES_ON_SA[@]}"; do
+  # Check if the policy binding already exists
+  if gcloud iam service-accounts get-iam-policy "$SA_EMAIL" --project="$PROJECT_ID" --format="json" | \
+    python3 -c "import sys, json; policy = json.load(sys.stdin); print(any(b['role'] == '$role' and 'user:$RUNNER_USER' in b.get('members', []) for b in policy.get('bindings', [])))" | \
+    grep -q "True"; then
+    echo "   User role on SA already exists: $role"
+  else
+    echo "   Applying role for user on SA: $role"
+    gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+      --member="user:$RUNNER_USER" \
+      --role="$role" \
+      --project="$PROJECT_ID" > /dev/null
+  fi
+done
+
+# Add a delay to allow user roles on the SA to propagate before impersonation
+echo "   Waiting for 30 seconds for user permissions to propagate..."
+sleep 30
 
 echo "✅ Service Account permissions are set."
 
@@ -189,15 +219,21 @@ echo "✅ Terraform state bucket is ready."
 
 
 
-# 7. Build container image
-echo "--- Building and pushing container image ---"
-# The IMAGE_URL is now constructed above. The build script will run and push to this tag.
-# All output from the build script will be streamed directly to the console.
-if ! $IMAGE_BUILD_SCRIPT "$PROJECT_ID" "$REGION" "$REPO_NAME" "$IMAGE_NAME"; then
-    echo "Error: Image build failed."
-    exit 1
+# 7. Build container image (if it doesn't already exist)
+echo "--- Checking for existing container image ---"
+if gcloud artifacts docker images describe "$IMAGE_URL" --project="$PROJECT_ID" &>/dev/null; then
+  echo "   Image already exists: $IMAGE_URL"
+  echo "   Skipping image build."
+else
+  echo "   Image not found. Building and pushing container image..."
+  # The IMAGE_URL is now constructed above. The build script will run and push to this tag.
+  # All output from the build script will be streamed directly to the console.
+  if ! $IMAGE_BUILD_SCRIPT "$PROJECT_ID" "$REGION" "$REPO_NAME" "$IMAGE_NAME"; then
+      echo "Error: Image build failed."
+      exit 1
+  fi
+  echo "Image successfully built. Using URL: $IMAGE_URL"
 fi
-echo "Image successfully built. Using URL: $IMAGE_URL"
 
 # 8. Append the dynamic image_url to terraform.tfvars
 echo "--- Appending image_url to terraform.tfvars ---"
@@ -205,56 +241,55 @@ echo "--- Appending image_url to terraform.tfvars ---"
 sed -i '/^image_url/d' "$TFVARS_FILE"
 echo "image_url = \"$IMAGE_URL\"" >> "$TFVARS_FILE"
 
-# 9. Initialize Terraform
-echo "--- Generating temporary ADC access token for Terraform ---"
-if ! TF_ACCESS_TOKEN=$(gcloud auth application-default print-access-token 2>/dev/null); then
-    echo "Error: Failed to get Application Default Credentials. Please run 'gcloud auth application-default login' to configure your credentials."
-    exit 1
-fi
-export GOOGLE_OAUTH_ACCESS_TOKEN="$TF_ACCESS_TOKEN"
+# 9. Enable Cloud Resource Manager API
+# This API is a prerequisite for Terraform to be able to read or enable other APIs.
+# We enable it here directly to prevent race conditions during Terraform's plan phase.
+echo "--- Enabling prerequisite Cloud Resource Manager API ---"
+gcloud services enable cloudresourcemanager.googleapis.com --project="$PROJECT_ID"
+echo "   Waiting for 30 seconds for API enablement to propagate..."
+sleep 30
 
-echo "--- Initializing Terraform ---"
-terraform init -upgrade -backend-config="bucket=$TF_STATE_BUCKET"
-
-# 10. Import existing resources into Terraform state (if they exist)
-echo "--- Importing existing infrastructure into Terraform state (if they exist) ---"
-# Construct resource names from config values
-RUN_SA_ACCOUNT_ID="${RESOURCE_PREFIX}-runner"
-RUN_SA_EMAIL="${RUN_SA_ACCOUNT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
-SCHEDULER_SA_ACCOUNT_ID="${RESOURCE_PREFIX}-scheduler"
-SCHEDULER_SA_EMAIL="${SCHEDULER_SA_ACCOUNT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
-AGENTIC_DSTA_SA_ACCOUNT_ID="${RESOURCE_PREFIX}-sa"
-AGENTIC_DSTA_SA_EMAIL="${AGENTIC_DSTA_SA_ACCOUNT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
-FIRESTORE_DB_NAME="${RESOURCE_PREFIX}-firestore"
-STORAGE_BUCKET_NAME="${RESOURCE_PREFIX}-bucket"
-TF_STATE_BUCKET_IN_MODULE="${RESOURCE_PREFIX}-tf-state"
-APP_BUCKET_NAME="${STORAGE_BUCKET_NAME}-${PROJECT_ID}"
-
-# The import commands will fail if the resources are already in the state.
-# We ignore these errors with '|| true' so the script can continue.
-echo "   Importing resources (errors for already-imported resources can be ignored)..."
-terraform import "google_service_account.run_sa" "${RUN_SA_EMAIL}" || true
-terraform import "google_service_account.scheduler_sa" "${SCHEDULER_SA_EMAIL}" || true
-terraform import "google_service_account.agentic_dsta_sa" "${AGENTIC_DSTA_SA_EMAIL}" || true
-terraform import "module.firestore.google_firestore_database.database" "projects/${PROJECT_ID}/databases/${FIRESTORE_DB_NAME}" || true
-terraform import "module.storage.google_storage_bucket.buckets[\"${TF_STATE_BUCKET_IN_MODULE}\"]" "${TF_STATE_BUCKET_IN_MODULE}" || true
-terraform import "module.storage.google_storage_bucket.buckets[\"${APP_BUCKET_NAME}\"]" "${APP_BUCKET_NAME}" || true
-echo "✅ Infrastructure import attempts complete."
-
-# 11. Run Terraform to deploy all infrastructure
-echo "--- Generating temporary access token for API Hub initialization ---"
+# 10. Generate Access Token & Initialize Terraform
+echo "--- Generating Access Token and Initializing Terraform ---"
 ACCESS_TOKEN=$(gcloud auth print-access-token --impersonate-service-account="$SA_EMAIL")
 if [ -z "$ACCESS_TOKEN" ]; then
     echo "Error: Failed to retrieve access token for $SA_EMAIL."
     exit 1
 fi
 
+terraform init -upgrade -reconfigure \
+  -backend-config="bucket=$TF_STATE_BUCKET" \
+  -backend-config="access_token=$ACCESS_TOKEN"
+
+# 11. Import existing resources to prevent "Already Exists" errors
+echo "--- Importing existing resources into Terraform state ---"
+
+# Firestore Database
+terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
+  module.firestore.google_firestore_database.database projects/${PROJECT_ID}/databases/dsta-agentic-firestore || echo "Firestore Database import failed or already imported."
+
+# Secret Manager Secrets
+echo "--- Importing Secrets ---"
+
+# Additional secrets from config.yaml
+for secret_name in ${ADDITIONAL_SECRETS}; do
+  echo "Attempting to import secret: ${secret_name}"
+  terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
+  "module.secret_manager.google_secret_manager_secret.secrets[\"${secret_name}\"]" projects/${PROJECT_ID}/secrets/${secret_name} || echo "${secret_name} import failed or already imported."
+done
+
+echo "--- Finished attempting to import resources ---"
+
+
+# 11. Run Terraform to deploy all infrastructure
 echo "--- Running Terraform to deploy all services ---"
-terraform apply -auto-approve -var-file="$TFVARS_FILE" -var="access_token=$ACCESS_TOKEN"
+echo "Terraform will now ask you to enter the required secret values."
+echo "Please paste the values in the format: { \"SECRET_NAME_1\" = \"value1\", \"SECRET_NAME_2\" = \"value2\" }"
+echo "Note: The input will be hidden for security."
+export GOOGLE_OAUTH_ACCESS_TOKEN="$ACCESS_TOKEN"
+terraform apply -var-file="$TFVARS_FILE" \
+  -var="access_token=$ACCESS_TOKEN"
 
 echo "--- Deployment complete! ---"
 
-# 11. Unset impersonation at the end of the script
-echo "--- Cleaning up authentication settings ---"
-gcloud config unset auth/impersonate_service_account
-unset GOOGLE_OAUTH_ACCESS_TOKEN
+# The cleanup function will be called automatically on exit.

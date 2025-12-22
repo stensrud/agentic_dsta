@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket  = "agentic-dsta-tf-state"
+    bucket  = "${var.resource_prefix}-tf-state"
     prefix  = "terraform/agentic_dsta"
   }
 }

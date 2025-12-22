@@ -33,6 +33,7 @@ def fetch_instructions_from_firestore(
   if llm_request.contents and llm_request.contents[-1].role == "user":
     if llm_request.contents[-1].parts:
       last_user_message = llm_request.contents[-1].parts[0].text
+  print(f"User message: {last_user_message}")
 
   if not last_user_message:
     # If there's no user message, do nothing.
@@ -46,19 +47,23 @@ def fetch_instructions_from_firestore(
     # If no customer_id is found, proceed without modification.
     return None
   customer_id = customer_id_match.group(1)
+  print(f"Extracted customer_id: {customer_id}")
 
   # Step 3: Fetch instructions from Firestore using the agent's initialized tool
   firestore_toolset = FirestoreToolset()
   if not firestore_toolset:
     error_message = "Error: FirestoreToolset not available in the agent."
+    print(error_message)
     return LlmResponse(
         content=types.Content(role="model", parts=[types.Part(text=error_message)])
     )
 
   instructions_doc = firestore_toolset.get_document(collection="CustomerInstructions", document_id=customer_id)
   fetched_instruction = instructions_doc.get("data", {}).get("instruction", "")
+  print(f"Fetched instruction from Firestore: {fetched_instruction}")
   if not fetched_instruction:
     error_message = f"Error: No instructions found for customer {customer_id}."
+    print(error_message)
     return LlmResponse(
         content=types.Content(role="model", parts=[types.Part(text=error_message)])
     )
@@ -76,9 +81,10 @@ def fetch_instructions_from_firestore(
     original_instruction.parts.append(types.Part(text=""))
 
   base_instruction = original_instruction.parts[0].text or ""
+  print(f"Original system instruction: {base_instruction}")
   # Prepend the fetched instructions to the original system instruction
   modified_instruction = fetched_instruction
-
+  print(f"Final modified instruction: {modified_instruction}")
 
   original_instruction.parts[0].text = modified_instruction
   llm_request.config.system_instruction = original_instruction

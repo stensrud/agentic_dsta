@@ -88,7 +88,7 @@ variable "run_sa_roles" {
   type        = list(string)
   default = [
     "roles/datastore.user",
-    "roles/apihub.viewer",
+    "roles/apihub.editor",
     "roles/aiplatform.user",
     "roles/secretmanager.secretAccessor",
     "roles/run.invoker"
@@ -195,6 +195,7 @@ variable "gcp_apis" {
   ]
 }
 
+
 # --- Service Accounts and IAM ---
 
 variable "agentic_dsta_sa_account_id" {
@@ -291,7 +292,7 @@ variable "sa_session_init_scheduler_job_description" {
 variable "sa_session_init_scheduler_job_schedule" {
   description = "Schedule for sa-session-init-job scheduler job."
   type        = string
-  default     = "5 9 * * 1-5"
+  default     = "*/3 * * * *"
 }
 
 variable "sa_session_init_scheduler_job_timezone" {
@@ -321,7 +322,7 @@ variable "sa_run_sse_scheduler_job_description" {
 variable "sa_run_sse_scheduler_job_schedule" {
   description = "Schedule for sa-run-sse-job scheduler job."
   type        = string
-  default     = "5 9 * * 1-5"
+  default     = "*/8 * * * *"
 }
 
 variable "sa_run_sse_scheduler_job_timezone" {
@@ -361,8 +362,7 @@ variable "scheduler_cron" {
 }
 
 # --- Secrets ---
-# Secrets are now managed by the deploy.sh script and read directly by the secret_manager module.
-
+# Secrets are now managed by the deploy.sh script and read directly by the secret_manager module
 variable "apihub_vertex_location" {
   description = "The multi-region for API Hub Vertex AI Search data (e.g., 'us' or 'eu')."
   type        = string
@@ -383,6 +383,12 @@ variable "account_email" {
 variable "access_token" {
   description = "The access token to use for API Hub initialization."
   type        = string
+  sensitive   = true
+}
+
+variable "secret_values" {
+  description = "A map of secret names to their values, provided by the deploy script."
+  type        = map(string)
   sensitive   = true
 }
 

@@ -24,22 +24,13 @@ import os
 
 # The root_agent definition for the marketing_agent.
 model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+
+# Read the prompt from the external file.
+with open(os.path.join(os.path.dirname(__file__), "prompt.txt"), "r") as f:
+    prompt = f.read()
+
 root_agent = agents.LlmAgent(
-    instruction="""
-      You are a Marketing Campaign Manager responsible for deciding marketing campaign actions based on data from ApiHub, Firestore.
-
-      Your responsibilities:
-      1. Extract customer_id and campaign_id from the user's request
-      2. Use the api_hub_manager tool to gather relevant marketing data
-      3. Use the firestore_toolset to read company preferences
-      4. Use the google_ads_manager tool to enable or disable campaigns
-      5. Provide confirmation of the campaign status change
-
-      When users request to:
-        - "Turn on", "enable", "activate" a campaign: Use the tool to set the campaign status to ENABLED
-
-      Always confirm the customer ID and campaign ID before making changes.
-      """,
+    instruction=prompt,
     model=model,
     name="marketing_campaign_manager",
     tools=[

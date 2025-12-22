@@ -78,7 +78,30 @@ The following diagram illustrates the architecture of the Agentic Dynamic Signal
     *   `roles/run.admin`
     *   `roles/iam.serviceAccountAdmin`
     *   `roles/secretmanager.admin`
+    *   `roles/iam.serviceAccountViewer`
+    *   `roles/iam.serviceAccountTokenCreator`
     * [TBD]
+
+### 5.1.1 API Hub Setup
+
+This solution relies on Google Cloud API Hub. Please perform the following one-time setup in your Google Cloud Project:
+
+1.  **Enable API Hub API:**
+    ```bash
+    gcloud services enable apihub.googleapis.com --project [YOUR_PROJECT_ID]
+    ```
+
+2.  **Register Host Project:** This links API Hub to your project. This only needs to be done once per project and region.
+    ```bash
+    gcloud api-hub host-project-registrations create [YOUR_PROJECT_ID] --location=[YOUR_REGION] --project=[YOUR_PROJECT_ID]
+    ```
+    *Replace `[YOUR_PROJECT_ID]` and `[YOUR_REGION]` accordingly.*
+
+3.  **Create API Hub Instance:** Currently, only an instance named `default` is supported by the agent.
+    ```bash
+    gcloud api-hub api-hub-instances create default --location=[YOUR_REGION] --project=[YOUR_PROJECT_ID]
+    ```
+    *This command may not yet be available in gcloud. You may need to create the instance via the Cloud Console or API. Navigate to the API Hub section in the Google Cloud Console and create an instance named `default` in your chosen region.*
 
 ### 5.2. Local Environment
 
@@ -107,10 +130,28 @@ Follow the official Google Ads API documentation to obtain your developer token,
 2.  **OAuth2 Client ID and Client Secret:**
     *   Configure an OAuth2 consent screen and create credentials for a **Desktop app**. This will provide you with a client ID and client secret. Follow the guide at [Create a Client ID and Client Secret](https://developers.google.com/google-ads/api/docs/oauth/cloud-project#create_a_client_id_and_client_secret).
     *   **Important:** On your OAuth consent screen configuration, you must add the Google Ads API scope: `https://www.googleapis.com/auth/adwords`.
+    *   When creating your OAuth2 Client ID, make sure to add `http://127.0.0.1:8080` to the list of **Authorized redirect URIs**. The `generate_user_credentials.py` script uses this URI to capture the authorization response. Failure to add this will result in a `redirect_uri_mismatch` error.
 
-3.  **Refresh Token:**
-    *   You must generate a long-lived refresh token that the application can use to obtain new access tokens. The Google Ads API provides a [standalone script](https://github.com/googleads/google-ads-python/blob/main/examples/authentication/generate_user_credentials.py) to help with this.
-    *   Download and run the `generate_user_credentials.py` script from the Google Ads Python client library. You will be prompted to authorize access, and the script will output a refresh token.
+3.  **Generate Refresh Token:**
+    *   To generate the refresh token, you will use a helper script. This script automates the OAuth2 flow to get the necessary refresh token.
+    *   **Prerequisites:**
+        *   Ensure you have Python installed.
+        *   Install the Google Ads Python library:
+            ```bash
+            pip install google-ads
+            ```
+    *   **Download the script:** Provide a link to the script or include it in your repository. For example, if you've adapted `generate_user_credentials.py`:
+        *   You can find the example script here: [`generate_user_credentials.py`](https://github.com/googleads/google-ads-python/blob/main/examples/authentication/generate_user_credentials.py)
+    *   **Run the script:** Execute the script, providing your Client ID and Client Secret obtained in the previous step:
+        ```bash
+        python generate_user_credentials.py --client_id=YOUR_CLIENT_ID --client_secret=YOUR_CLIENT_SECRET
+        ```
+    *   **Authorization:** The script will output a URL. Copy this URL and open it in your web browser.
+    *   Log in with the Google account that has access to the Google Ads account you want to manage.
+    *   Grant the requested permissions (it should include the `adwords` scope).
+    *   After granting permissions, you'll be redirected to a page on `127.0.0.1:8080` (or an error page if the redirect URI wasn't set up correctly). The script will capture the authorization code from the redirect.
+    *   **Result:** The script will then exchange the authorization code for a refresh token and an access token, and print the refresh token to the console. It might also save the credentials to a `google-ads.yaml` file in your home directory.
+    *   **Copy the Refresh Token:** Securely copy the displayed refresh token. You will need this for your `config.yaml`.
 
 Once you have collected all these credentials, have them ready. You will be prompted to enter them securely during the first run of the deployment script. You do **not** need to put them in any file.
 
@@ -315,6 +356,9 @@ This deployment provides two primary ways to interact with the agentic framework
 Once the deployment is complete, you can interact with all the individual agents (Google Ads, SA360, Firestore, API Hub) through a web interface provided by the Application Development Kit (ADK). This is useful for testing, debugging, and performing one-off tasks.
 
 The URL for your Cloud Run service will be printed at the end of the deployment script. Navigate to this URL in your browser to access the ADK web server.
+
+> [!NOTE]
+> The Application Development Kit (ADK) is an evolving framework. The Web UI's availability, features, and appearance are subject to change and are not guaranteed to remain consistent in future versions. As noted in the [official ADK documentation](https://google.github.io/adk-docs/get-started/streaming/quickstart-streaming/#try-the-agent-with-adk-web:~:text=Caution%3A%20ADK%20Web,debugging%20purposes%20only), the ADK Web interface is intended for testing and debugging purposes only.
 
 ### 10.2. Automated Execution via Cloud Scheduler
 

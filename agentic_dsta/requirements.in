@@ -7,6 +7,7 @@ google-ads
 google-adk
 google-adk[eval]
 google-cloud-firestore
+google-auth-oauthlib
 python-dotenv
 setuptools==80.9.0
 pytest

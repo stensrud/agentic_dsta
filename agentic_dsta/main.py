@@ -54,6 +54,7 @@ app: FastAPI = get_fast_api_app(
 # async def read_root():
 #     return {"Hello": "World"}
 
+
 def main():
   """Starts the FastAPI server."""
   # Use the PORT environment variable provided by Cloud Run, defaulting to 8080

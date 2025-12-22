@@ -13,11 +13,31 @@ if [ -z "$ACCOUNT_EMAIL" ]; then
   exit 1
 fi
 
-
 if [ -z "$ACCESS_TOKEN" ]; then
   echo "Error: Failed to retrieve access token for $ACCOUNT_EMAIL."
   exit 1
 fi
+
+# Wrapper for curl to handle HTTP errors
+# Returns 1 if 409 Conflict occurs, exits on any other error >= 400
+run_curl() {
+  local outfile
+  outfile=$(mktemp)
+  local http_code
+  http_code=$(curl -sSk -w "%{http_code}" -o "$outfile" "$@")
+  local exit_status=0
+  if [ "$http_code" -ge 400 ] && [ "$http_code" -ne 409 ]; then
+    echo "ERROR: curl command failed with HTTP status $http_code:" >&2
+    cat "$outfile" >&2
+    rm "$outfile"
+    exit 1
+  elif [ "$http_code" -eq 409 ]; then
+    echo "WARN: Resource already exists (HTTP 409)." >&2
+    exit_status=1
+  fi
+  rm "$outfile"
+  return $exit_status
+}
 
 # Source variables
 . "$(dirname "$0")/apihub_vars.sh"
@@ -27,31 +47,53 @@ API_HUB_URL="https://apihub.googleapis.com/v1/projects/$PROJECT_ID/locations/$LO
 create_api() {
   local api_id=$1
   local display_name=$2
-
-  echo "Creating API: $api_id"
-  curl -s -k -X POST "$API_HUB_URL/apis?apiId=$api_id" \
-    -H "Authorization: Bearer $ACCESS_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{
+  local payload="{
       \"displayName\": \"$display_name\",
       \"owner\": {
          \"email\": \"$ACCOUNT_EMAIL\"
       }
-    }" || echo "API $api_id creation possibly failed or already exists"
+    }"
+
+  echo "Attempting to create API: $api_id"
+  if run_curl -X POST "$API_HUB_URL/apis?apiId=$api_id" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$payload"
+  then
+    echo "API $api_id created successfully."
+  else
+    echo "API $api_id seems to exist (got 409), attempting update..."
+    run_curl -X PATCH "$API_HUB_URL/apis/$api_id?updateMask=displayName,owner" \
+      -H "Authorization: Bearer $ACCESS_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "$payload"
+    echo "API $api_id updated."
+  fi
 }
 
 create_version() {
   local api_id=$1
   local version_id=$2
   local display_name=$3
+  local payload="{
+      \"displayName\": \"$display_name\"
+    }"
 
-  echo "Creating Version: $version_id for API $api_id"
-  curl -s -k -X POST "$API_HUB_URL/apis/$api_id/versions?versionId=$version_id" \
+  echo "Attempting to create Version: $version_id for API $api_id"
+  if run_curl -X POST "$API_HUB_URL/apis/$api_id/versions?versionId=$version_id" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{
-      \"displayName\": \"$display_name\"
-    }" || echo "Version $version_id for API $api_id creation possibly failed or already exists"
+    -d "$payload"
+  then
+    echo "Version $version_id for API $api_id created successfully."
+  else
+    echo "Version $version_id for API $api_id seems to exist (got 409), attempting update..."
+    run_curl -X PATCH "$API_HUB_URL/apis/$api_id/versions/$version_id?updateMask=displayName" \
+      -H "Authorization: Bearer $ACCESS_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "$payload"
+    echo "Version $version_id for API $api_id updated."
+  fi
 }
 
 create_spec() {
@@ -92,10 +134,22 @@ EOF
   echo "Payload for $spec_id:"
   echo "$JSON_PAYLOAD"
 
-  curl -s -k -X POST "$API_HUB_URL/apis/$api_id/versions/$version_id/specs?specId=$spec_id" \
+  echo "Attempting to create spec $spec_id..."
+  if run_curl -X POST "$API_HUB_URL/apis/$api_id/versions/$version_id/specs?specId=$spec_id" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "$JSON_PAYLOAD" || echo "Spec $spec_id creation failed for API $api_id Version $version_id"
+    -d "$JSON_PAYLOAD"
+  then
+    echo "Spec $spec_id created successfully."
+  else
+    echo "Spec $spec_id seems to exist (got 409), attempting update..."
+    # 409 means it exists, so we PATCH to update
+    run_curl -X PATCH "$API_HUB_URL/apis/$api_id/versions/$version_id/specs/$spec_id?updateMask=displayName,contents,specType" \
+      -H "Authorization: Bearer $ACCESS_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "$JSON_PAYLOAD"
+    echo "Spec $spec_id updated."
+  fi
 }
 
 # Pollen API
