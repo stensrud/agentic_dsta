@@ -1,17 +1,34 @@
 """Tools for updating SA360 campaigns via a Google Sheet."""
 
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
+from firestore_agent.tools.firestore_toolset import FirestoreToolset
+from google.adk.models import LlmResponse
 from google.adk.tools.base_toolset import BaseToolset
 from google.adk.tools.function_tool import FunctionTool
+from google.genai import types
 from googleapiclient.errors import HttpError
 
 from .sa360_utils import get_sheets_service
 
-_SHEET_ID = os.environ.get("GOOGLE_SHEETS_ID")
-_SHEET_NAME = os.environ.get("GOOGLE_SHEETS_NAME")
+_SHEET_ID = None
+_SHEET_NAME = None
+
+
+def get_firestore_data():
+  global _SHEET_ID, _SHEET_NAME
+  firestore_toolset = FirestoreToolset()
+  if not firestore_toolset:
+    error_message = "Error: FirestoreToolset not available in the agent."
+    return LlmResponse(
+        content=types.Content(role="model", parts=[types.Part(text=error_message)])
+    )
+  data = firestore_toolset.query_collection("GoogleSheetsConfig")
+  all_documents = data.get("documents", [])
+  data = all_documents[0].get("data", {})
+  _SHEET_NAME, _SHEET_ID = data.get("SheetName"), data.get("SheetId")
+
 
 def get_campaign_details(campaign_id: str) -> Dict[str, Any]:
   """Fetches details for a specific SA360 campaign from the Google Sheet.
@@ -141,6 +158,8 @@ class SA360Toolset(BaseToolset):
 
   def __init__(self):
     super().__init__()
+    # Get sheet id and name here
+    get_firestore_data()
     self._get_campaign_details_tool = FunctionTool(
         func=get_campaign_details,
     )
