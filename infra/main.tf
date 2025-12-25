@@ -128,6 +128,7 @@ module "cloud_run_service" {
   env_vars = merge(var.run_service_env_vars, {
     GOOGLE_CLOUD_PROJECT = var.project_id
     GOOGLE_CLOUD_LOCATION = var.region
+    FIRESTORE_DB          = local.firestore_database_name
   })
   secret_env_vars = { for secret in module.secret_manager.secret_ids : secret => { name = secret, version = "latest" } }
   depends_on = [google_project_service.apis, module.secret_manager]

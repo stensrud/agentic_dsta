@@ -7,7 +7,14 @@ from agentic_dsta.firestore_agent.tools.firestore_toolset import FirestoreToolse
 
 class TestFirestoreToolset(unittest.TestCase):
 
-    @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test_project"})
+    def setUp(self):
+        self.mock_environ = patch.dict(os.environ, {
+            "GOOGLE_CLOUD_PROJECT": "test_project",
+            "FIRESTORE_DB": "dsta-agentic-firestore"
+        })
+        self.mock_environ.start()
+        self.addCleanup(self.mock_environ.stop)
+
     def test_init(self):
         toolset = FirestoreToolset()
         self.assertEqual(toolset._project_id, "test_project")

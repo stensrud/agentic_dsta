@@ -18,12 +18,18 @@ import google.ads.googleads.client
 from google.ads.googleads.errors import GoogleAdsException
 import google.auth
 import google.auth.exceptions
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_google_ads_client(customer_id: str):
+  logger.debug(f"get_google_ads_client called", extra={'customer_id': customer_id})
   """Initializes and returns a GoogleAdsClient."""
   try:
     try:
+      logger.debug("Attempting to use Application Default Credentials.")
       # First, try to use Application Default Credentials.
       credentials, _ = google.auth.default()
       # Pass the credentials object directly to the client constructor.
@@ -34,6 +40,7 @@ def get_google_ads_client(customer_id: str):
           use_proto_plus=True,
       )
     except google.auth.exceptions.DefaultCredentialsError:
+      logger.debug("ADC not found, falling back to environment variables.")
       # If ADC are not found, fall back to environment variables.
       config_data = {
           "login_customer_id": customer_id,
@@ -48,7 +55,16 @@ def get_google_ads_client(customer_id: str):
           config_data
       )
   except GoogleAdsException as ex:
-    print(f"Failed to create GoogleAdsClient: {ex}")
+    logger.error(f"Failed to create GoogleAdsClient", exc_info=True, extra={'customer_id': customer_id})
     for error in ex.failure.errors:
-      print(f"Error: {error.error_code} - {error.message}")
+      logger.error(f"Google Ads API Error: {error.error_code} - {error.message}", extra={'customer_id': customer_id, 'error_code': str(error.error_code), 'error_message': error.message})
     return None
+
+if __name__ == '__main__':
+    logger.info("Testing logger - INFO", extra={'test_case': 123, 'user': 'test_user'})
+    logger.warning("Testing logger - WARNING")
+    try:
+        raise ValueError("Something went wrong")
+    except ValueError:
+        logger.error("Testing logger - ERROR with exception", exc_info=True, extra={'foo': 'bar'})
+    logger.debug("This DEBUG message should not appear with default LOG_LEVEL=INFO")

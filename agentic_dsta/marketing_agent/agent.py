@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Decision agent for managing marketing campaigns."""
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+)
 
 from google_ads_agent.tools.google_ads_getter import GoogleAdsGetterToolset
 from google_ads_agent.tools.google_ads_updater import GoogleAdsUpdaterToolset
@@ -23,10 +29,10 @@ from google.adk import agents
 import os
 
 # The root_agent definition for the marketing_agent.
-model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
 
 # Read the prompt from the external file.
-with open(os.path.join(os.path.dirname(__file__), "prompt.txt"), "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "prompt.txt"), "r", encoding='utf-8') as f:
     prompt = f.read()
 
 root_agent = agents.LlmAgent(

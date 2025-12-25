@@ -26,6 +26,10 @@ from google.adk.tools.apihub_tool.apihub_toolset import APIHubToolset as ADKAPIH
 from google.auth import default
 from google.auth.transport.requests import Request
 import requests
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_access_token() -> str:
@@ -60,16 +64,16 @@ def _list_apis_from_apihub(project_id: str, location: str) -> List[Dict[str, Any
         "Content-Type": "application/json"
     }
 
-    print(f"Querying API Hub: {url}")
+    logger.info(f"Querying API Hub: {url}")
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
-        print(f"API Hub query failed: {response.status_code} - {response.text}")
+        logger.error(f"API Hub query failed: {response.status_code} - {response.text}")
         response.raise_for_status()
 
     data = response.json()
     apis = data.get("apis", [])
-    print(f"Found {len(apis)} APIs in API Hub")
+    logger.info(f"Found {len(apis)} APIs in API Hub")
     return apis
 
 
@@ -109,20 +113,17 @@ class DynamicMultiAPIToolset(BaseToolset):
     def _discover_and_load_apis(self):
         """Discover APIs from API Hub and create toolsets."""
         if not self._project_id:
-            print("ERROR: No project_id provided. Set GOOGLE_CLOUD_PROJECT environment variable.")
+            logger.error("No project_id provided. Set GOOGLE_CLOUD_PROJECT environment variable.")
             return
 
-        print(f"Discovering APIs from API Hub (project: {self._project_id}, location: {self._location})")
+        logger.info(f"Discovering APIs from API Hub (project: {self._project_id}, location: {self._location})")
 
         try:
             # Query API Hub for available APIs
             apis = _list_apis_from_apihub(self._project_id, self._location)
 
             if not apis:
-                print("No APIs found in API Hub. Please ensure:")
-                print("  1. APIs are registered in API Hub")
-                print("  2. You have apihub.apis.list permission")
-                print("  3. API Hub is enabled in your project")
+                logger.warning("No APIs found in API Hub. Please ensure:\n  1. APIs are registered in API Hub\n  2. You have apihub.apis.list permission\n  3. API Hub is enabled in your project")
                 return
 
             access_token = _get_access_token()
@@ -148,13 +149,12 @@ class DynamicMultiAPIToolset(BaseToolset):
                     api_attributes = api.get("attributes", {})
                     api_tags = api_attributes.get("tags", [])
                     if not any(tag in api_tags for tag in self._filter_tags):
-                        print(f"Skipping {api_id}: missing required tags {self._filter_tags}")
+                        logger.info(f"Skipping {api_id}: missing required tags {self._filter_tags}", extra={'api_id': api_id})
                         skipped_count += 1
                         continue
 
                 try:
-                    print(f"Loading API: {api_id}")
-                    print(f"  Display name: {display_name}")
+                    logger.info(f"Loading API: {api_id}", extra={'api_id': api_id, 'display_name': display_name})
 
                     # Check for API key requirement and use environment variable if available
                     # Improved API Key Discovery
@@ -169,14 +169,14 @@ class DynamicMultiAPIToolset(BaseToolset):
                     auth_credential = None
 
                     if api_key:
-                        print(f"  Configuring API key authentication for {display_name} ({api_id})")
+                        logger.info(f"Configuring API key authentication for {display_name} ({api_id})", extra={'api_id': api_id, 'display_name': display_name})
                         from google.adk.tools.openapi_tool.auth.auth_helpers import token_to_scheme_credential
                         # Pollen API uses 'key' as the query parameter name
                         auth_scheme, auth_credential = token_to_scheme_credential(
                             "apikey", "query", "key", api_key
                         )
                     else:
-                        print(f"  ⚠ WARNING: No API key found for {display_name}")
+                        logger.warning(f"No API key found for {display_name}", extra={'api_id': api_id, 'display_name': display_name})
 
                     # Create APIHubToolset for this API
                     toolset = ADKAPIHubToolset(
@@ -189,24 +189,17 @@ class DynamicMultiAPIToolset(BaseToolset):
                     )
                     self._api_toolsets.append(toolset)
                     loaded_count += 1
-                    print(f"✓ Loaded API: {api_id}")
+                    logger.info(f"✓ Loaded API: {api_id}", extra={'api_id': api_id})
                 except Exception as e:
                     # Skip APIs that can't be loaded (e.g., no spec)
-                    print(f"✗ Skipping API {api_id}: {str(e)}")
+                    logger.warning(f"✗ Skipping API {api_id}: {str(e)}", extra={'api_id': api_id}, exc_info=True)
                     skipped_count += 1
                     continue
 
-            print(f"\n=== API Discovery Summary ===")
-            print(f"Total APIs in API Hub: {len(apis)}")
-            print(f"Successfully loaded: {loaded_count}")
-            print(f"Skipped: {skipped_count}")
-            if self._filter_tags:
-                print(f"Filter tags: {self._filter_tags}")
+            logger.info(f"\n=== API Discovery Summary ===\nTotal APIs in API Hub: {len(apis)}\nSuccessfully loaded: {loaded_count}\nSkipped: {skipped_count}\nFilter tags: {self._filter_tags if self._filter_tags else 'None'}")
 
         except Exception as e:
-            print(f"ERROR discovering APIs from API Hub: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"ERROR discovering APIs from API Hub: {str(e)}", exc_info=True)
             # Continue with empty toolsets - agent will work without API Hub APIs
 
     async def get_tools(self, readonly_context: Optional[Any] = None) -> List[FunctionTool]:
@@ -217,7 +210,7 @@ class DynamicMultiAPIToolset(BaseToolset):
                 tools = await toolset.get_tools(readonly_context)
                 all_tools.extend(tools)
             except Exception as e:
-                print(f"Error loading tools from toolset: {str(e)}")
+                logger.error(f"Error loading tools from toolset: {str(e)}", exc_info=True)
                 continue
         return all_tools
 
@@ -294,7 +287,7 @@ class LazyLoadAPIToolset(BaseToolset):
             self._cache_timestamp = current_time
 
         except Exception as e:
-            print(f"Error loading APIs: {str(e)}")
+            logger.error(f"Error loading APIs: {str(e)}", exc_info=True)
             # Return cached tools or empty list
             return self._cached_tools or []
 
@@ -362,20 +355,20 @@ class SelectiveAPIToolset(BaseToolset):
     def _discover_and_load_apis(self):
         """Discover and load APIs matching criteria."""
         if not self._project_id:
-            print("ERROR: No project_id provided. Set GOOGLE_CLOUD_PROJECT environment variable.")
+            logger.error("No project_id provided. Set GOOGLE_CLOUD_PROJECT environment variable.")
             return
 
-        print(f"Discovering APIs from API Hub (project: {self._project_id}, location: {self._location})")
+        logger.info(f"Discovering APIs from API Hub (project: {self._project_id}, location: {self._location})")
         if self._required_tags:
-            print(f"Filtering by tags: {self._required_tags}")
+            logger.info(f"Filtering by tags: {self._required_tags}")
         if self._required_attributes:
-            print(f"Filtering by attributes: {self._required_attributes}")
+            logger.info(f"Filtering by attributes: {self._required_attributes}")
 
         try:
             apis = _list_apis_from_apihub(self._project_id, self._location)
 
             if not apis:
-                print("No APIs found in API Hub.")
+                logger.warning("No APIs found in API Hub.")
                 return
 
             access_token = _get_access_token()
@@ -386,13 +379,13 @@ class SelectiveAPIToolset(BaseToolset):
                 api_id = api_name.split("/")[-1]
 
                 if not self._matches_criteria(api):
-                    print(f"Skipping {api_id}: doesn't match criteria")
+                    logger.info(f"Skipping {api_id}: doesn't match criteria", extra={'api_id': api_id})
                     continue
 
                 description = api.get("description", "")
 
                 try:
-                    print(f"Loading API: {api_id}")
+                    logger.info(f"Loading API: {api_id}", extra={'api_id': api_id})
                     toolset = ADKAPIHubToolset(
                         name=api_id,
                         description=description or f"API: {api_id}",
@@ -401,19 +394,15 @@ class SelectiveAPIToolset(BaseToolset):
                     )
                     self._api_toolsets.append(toolset)
                     matched_count += 1
-                    print(f"✓ Loaded API: {api_id}")
+                    logger.info(f"✓ Loaded API: {api_id}", extra={'api_id': api_id})
                 except Exception as e:
-                    print(f"✗ Failed to load {api_id}: {str(e)}")
+                    logger.warning(f"✗ Failed to load {api_id}: {str(e)}", extra={'api_id': api_id}, exc_info=True)
                     continue
 
-            print(f"\n=== API Discovery Summary ===")
-            print(f"Total APIs in API Hub: {len(apis)}")
-            print(f"Loaded {matched_count} APIs matching criteria")
+            logger.info(f"\n=== API Discovery Summary ===\nTotal APIs in API Hub: {len(apis)}\nLoaded {matched_count} APIs matching criteria")
 
         except Exception as e:
-            print(f"ERROR discovering APIs: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"ERROR discovering APIs: {str(e)}", exc_info=True)
 
     async def get_tools(self, readonly_context: Optional[Any] = None) -> List[FunctionTool]:
         """Returns all tools from matching APIs."""

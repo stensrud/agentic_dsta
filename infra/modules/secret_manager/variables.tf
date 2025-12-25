@@ -8,7 +8,9 @@ variable "secret_names" {
   type        = list(string)
   default = [
     "GOOGLE_ADS_DEVELOPER_TOKEN",
-    "GOOGLE_ADS_REFRESH_TOKEN"
+    "GOOGLE_ADS_REFRESH_TOKEN",
+    "GOOGLE_ADS_CLIENT_ID",
+    "GOOGLE_ADS_CLIENT_SECRET"
   ]
 }
 

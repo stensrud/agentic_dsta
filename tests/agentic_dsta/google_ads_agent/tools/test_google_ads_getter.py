@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from agentic_dsta.google_ads_agent.tools import google_ads_getter
+import google.auth.exceptions
 from google.ads.googleads.errors import GoogleAdsException
 
 
@@ -21,8 +22,9 @@ class TestGoogleAdsGetter(unittest.TestCase):
         "GOOGLE_ADS_REFRESH_TOKEN": "mock-refresh-token",
         "GOOGLE_ADS_DEVELOPER_TOKEN": "mock-developer-token",
     })
-    @patch('google.ads.googleads.client.GoogleAdsClient.load_from_dict')
-    def test_get_google_ads_client_with_oauth(self, mock_load_from_dict):
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_client.google.ads.googleads.client.GoogleAdsClient.load_from_dict')
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_client.google.auth.default', side_effect=google_ads_getter.google.auth.exceptions.DefaultCredentialsError)
+    def test_get_google_ads_client_with_oauth(self, mock_google_auth_default, mock_load_from_dict):
         google_ads_getter.get_google_ads_client("12345")
         mock_load_from_dict.assert_called_with({
             "login_customer_id": "12345",
@@ -34,8 +36,9 @@ class TestGoogleAdsGetter(unittest.TestCase):
             "use_proto_plus": True,
         })
 
-    @patch("google.ads.googleads.client.GoogleAdsClient.load_from_dict", side_effect=GoogleAdsException(None, None, MagicMock(), "request_id"))
-    def test_get_google_ads_client_exception(self, mock_load_from_dict):
+    @patch("agentic_dsta.google_ads_agent.tools.google_ads_client.google.ads.googleads.client.GoogleAdsClient.load_from_dict", side_effect=GoogleAdsException(None, None, MagicMock(), "request_id"))
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_client.google.auth.default', side_effect=google_ads_getter.google.auth.exceptions.DefaultCredentialsError)
+    def test_get_google_ads_client_exception(self, mock_google_auth_default, mock_load_from_dict):
         client = google_ads_getter.get_google_ads_client("12345")
         self.assertIsNone(client)
 
@@ -164,7 +167,57 @@ class TestGoogleAdsGetter(unittest.TestCase):
     def test_google_ads_getter_toolset(self):
         toolset = google_ads_getter.GoogleAdsGetterToolset()
         tools = asyncio.run(toolset.get_tools())
-        self.assertEqual(len(tools), 3)
+        self.assertEqual(len(tools), 6)
+
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_getter.get_google_ads_client')
+    def test_list_shared_budgets_success(self, mock_get_google_ads_client):
+        mock_client = MagicMock()
+        mock_ga_service = MagicMock()
+        mock_client.get_service.return_value = mock_ga_service
+        mock_get_google_ads_client.return_value = mock_client
+
+        mock_row = MagicMock()
+        mock_row.campaign_budget._pb = MagicMock()
+        mock_ga_service.search_stream.return_value = [MagicMock(results=[mock_row])]
+
+        with patch('agentic_dsta.google_ads_agent.tools.google_ads_getter.MessageToDict', return_value={'id': 'budget1'}) as mock_msg_to_dict:
+            result = google_ads_getter.list_shared_budgets("12345")
+
+        self.assertIn('shared_budgets', result)
+        self.assertEqual(len(result['shared_budgets']), 1)
+        self.assertEqual(result['shared_budgets'][0]['id'], 'budget1')
+
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_getter.get_google_ads_client')
+    def test_list_shared_budgets_none(self, mock_get_google_ads_client):
+        mock_client = MagicMock()
+        mock_ga_service = MagicMock()
+        mock_client.get_service.return_value = mock_ga_service
+        mock_get_google_ads_client.return_value = mock_client
+
+        mock_ga_service.search_stream.return_value = [MagicMock(results=[])]
+
+        result = google_ads_getter.list_shared_budgets("12345")
+
+        self.assertEqual(result, {'shared_budgets': []})
+
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_getter.get_google_ads_client')
+    def test_list_shared_budgets_exception(self, mock_get_google_ads_client):
+        mock_client = MagicMock()
+        mock_ga_service = MagicMock()
+        mock_client.get_service.return_value = mock_ga_service
+        mock_get_google_ads_client.return_value = mock_client
+
+        mock_ga_service.search_stream.side_effect = GoogleAdsException(None, None, MagicMock(), "request_id")
+
+        result = google_ads_getter.list_shared_budgets("12345")
+
+        self.assertIn('error', result)
+        self.assertIn('Failed to fetch shared budgets', result['error'])
+
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_getter.get_google_ads_client', return_value=None)
+    def test_list_shared_budgets_client_fail(self, mock_get_google_ads_client):
+        result = google_ads_getter.list_shared_budgets("12345")
+        self.assertEqual(result, {'error': 'Failed to get Google Ads client.'})
 
 if __name__ == '__main__':
     unittest.main()

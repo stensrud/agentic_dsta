@@ -14,15 +14,18 @@
 """Main application file for the FastAPI server."""
 
 import os
-
 from dotenv import load_dotenv
 import fastapi
 from google.adk.cli import fast_api
 import uvicorn
+from .core.logging_config import setup_logging
 
 
 # Load environment variables from .env file for local development
 load_dotenv()
+
+# Setup centralized logging
+setup_logging()
 
 
 FastAPI = fastapi.FastAPI

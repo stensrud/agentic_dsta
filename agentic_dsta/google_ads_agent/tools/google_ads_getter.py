@@ -22,6 +22,10 @@ import google.ads.googleads.client
 from google.ads.googleads.errors import GoogleAdsException
 from google.protobuf.json_format import MessageToDict
 from .google_ads_client import get_google_ads_client
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 def get_campaign_details(customer_id: str, campaign_id: str) -> Dict[str, Any]:
   """Fetches details for a specific Google Ads campaign.
@@ -49,6 +53,7 @@ def get_campaign_details(customer_id: str, campaign_id: str) -> Dict[str, Any]:
           campaign_budget.delivery_method,
           campaign_budget.type,
           campaign.app_campaign_setting.bidding_strategy_goal_type,
+          campaign.advertising_channel_type,
           campaign.asset_automation_settings,
           campaign.audience_setting.use_audience_grouped,
           campaign.base_campaign,
@@ -98,9 +103,9 @@ def get_campaign_details(customer_id: str, campaign_id: str) -> Dict[str, Any]:
       return {"error": f"Campaign with ID '{campaign_id}' not found."}
 
   except GoogleAdsException as ex:
-    print(f"Failed to fetch campaign details: {ex}")
+    logger.error(f"Failed to fetch campaign details", exc_info=True, extra={'customer_id': customer_id, 'campaign_id': campaign_id})
     for error in ex.failure.errors:
-      print(f"Error: {error.error_code} - {error.message}")
+      logger.error(f"Google Ads API Error: {error.error_code} - {error.message}", extra={'customer_id': customer_id, 'campaign_id': campaign_id, 'error_code': str(error.error_code), 'error_message': error.message})
 
     return {"error": f"Failed to fetch campaign details: {ex.failure}"}
 
@@ -135,9 +140,9 @@ def search_geo_target_constants(
       )
     return {"suggestions": suggestions}
   except GoogleAdsException as ex:
-    print(f"Failed to search for geo target constants: {ex}")
+    logger.error(f"Failed to search for geo target constants", exc_info=True, extra={'customer_id': customer_id, 'location_name': location_name})
     for error in ex.failure.errors:
-      print(f"Error: {error.error_code} - {error.message}")
+      logger.error(f"Google Ads API Error: {error.error_code} - {error.message}", extra={'customer_id': customer_id, 'location_name': location_name, 'error_code': str(error.error_code), 'error_message': error.message})
     return {"error": f"Failed to search for geo target constants: {ex.failure}"}
 
 
@@ -212,6 +217,128 @@ def get_geo_targets(customer_id: str, campaign_id: str) -> Dict[str, Any]:
   }
 
 
+def list_shared_budgets(customer_id: str) -> Dict[str, Any]:
+  """Fetches explicitly shared budgets for a customer.
+
+  Args:
+      customer_id: The Google Ads customer ID (without hyphens).
+
+  Returns:
+      A dictionary containing a list of shared budgets or an error.
+  """
+  client = get_google_ads_client(customer_id)
+  if not client:
+    return {"error": "Failed to get Google Ads client."}
+
+  ga_service = client.get_service("GoogleAdsService")
+  query = """
+        SELECT
+          campaign_budget.id,
+          campaign_budget.name,
+          campaign_budget.resource_name,
+          campaign_budget.amount_micros,
+          campaign_budget.status,
+          campaign_budget.delivery_method,
+          campaign_budget.type
+        FROM campaign_budget
+        WHERE campaign_budget.explicitly_shared = TRUE
+          AND campaign_budget.status = 'ENABLED'
+    """
+
+  budgets = []
+  try:
+    stream = ga_service.search_stream(customer_id=customer_id, query=query)
+    for batch in stream:
+      for row in batch.results:
+        budgets.append(MessageToDict(row.campaign_budget._pb))
+    return {"shared_budgets": budgets}
+  except GoogleAdsException as ex:
+    logger.error(f"Failed to fetch shared budgets", exc_info=True, extra={'customer_id': customer_id})
+    for error in ex.failure.errors:
+      logger.error(f"Google Ads API Error: {error.error_code} - {error.message}", extra={'customer_id': customer_id, 'error_code': str(error.error_code), 'error_message': error.message})
+    return {"error": f"Failed to fetch shared budgets: {ex.failure}"}
+
+
+
+def get_campaigns_by_bidding_strategy(customer_id: str, bidding_strategy_resource_name: str) -> Dict[str, Any]:
+  """Fetches campaigns attached to a specific portfolio bidding strategy.
+
+  Args:
+      customer_id: The Google Ads customer ID (without hyphens).
+      bidding_strategy_resource_name: The resource name of the portfolio bidding strategy.
+
+  Returns:
+      A dictionary containing a list of campaigns or an error.
+  """
+  client = get_google_ads_client(customer_id)
+  if not client:
+    return {"error": "Failed to get Google Ads client."}
+
+  ga_service = client.get_service("GoogleAdsService")
+  query = f"""
+        SELECT
+          campaign.id,
+          campaign.name,
+          campaign.resource_name,
+          campaign.status
+        FROM campaign
+        WHERE campaign.bidding_strategy = '{bidding_strategy_resource_name}'
+    """
+
+  campaigns = []
+  try:
+    stream = ga_service.search_stream(customer_id=customer_id, query=query)
+    for batch in stream:
+      for row in batch.results:
+        campaigns.append(MessageToDict(row.campaign._pb))
+    return {"campaigns": campaigns}
+  except GoogleAdsException as ex:
+    logger.error(f"Failed to fetch campaigns by bidding strategy", exc_info=True, extra={'customer_id': customer_id, 'bidding_strategy': bidding_strategy_resource_name})
+    for error in ex.failure.errors:
+      logger.error(f"Google Ads API Error: {error.error_code} - {error.message}", extra={'customer_id': customer_id, 'error_code': str(error.error_code), 'error_message': error.message})
+    return {"error": f"Failed to fetch campaigns by bidding strategy: {ex.failure}"}
+
+
+
+def list_portfolio_bidding_strategies(customer_id: str) -> Dict[str, Any]:
+  """Fetches enabled portfolio bidding strategies for a customer.
+
+  Args:
+      customer_id: The Google Ads customer ID (without hyphens).
+
+  Returns:
+      A dictionary containing a list of bidding strategies or an error.
+  """
+  client = get_google_ads_client(customer_id)
+  if not client:
+    return {"error": "Failed to get Google Ads client."}
+
+  ga_service = client.get_service("GoogleAdsService")
+  query = """
+        SELECT
+          bidding_strategy.id,
+          bidding_strategy.name,
+          bidding_strategy.resource_name,
+          bidding_strategy.type
+        FROM bidding_strategy
+        WHERE bidding_strategy.status = 'ENABLED'
+    """
+
+  strategies = []
+  try:
+    stream = ga_service.search_stream(customer_id=customer_id, query=query)
+    for batch in stream:
+      for row in batch.results:
+        strategies.append(MessageToDict(row.bidding_strategy._pb))
+    return {"bidding_strategies": strategies}
+  except GoogleAdsException as ex:
+    logger.error(f"Failed to fetch portfolio bidding strategies", exc_info=True, extra={'customer_id': customer_id})
+    for error in ex.failure.errors:
+      logger.error(f"Google Ads API Error: {error.error_code} - {error.message}", extra={'customer_id': customer_id, 'error_code': str(error.error_code), 'error_message': error.message})
+    return {"error": f"Failed to fetch portfolio bidding strategies: {ex.failure}"}
+
+
+
 class GoogleAdsGetterToolset(BaseToolset):
   """Toolset for getting information from Google Ads."""
 
@@ -224,6 +351,13 @@ class GoogleAdsGetterToolset(BaseToolset):
         func=search_geo_target_constants,
     )
     self._get_geo_targets_tool = FunctionTool(func=get_geo_targets)
+    self._list_portfolio_bidding_strategies_tool = FunctionTool(
+        func=list_portfolio_bidding_strategies,
+    )
+    self._get_campaigns_by_bidding_strategy_tool = FunctionTool(
+        func=get_campaigns_by_bidding_strategy,
+    )
+    self._list_shared_budgets_tool = FunctionTool(func=list_shared_budgets)
 
   async def get_tools(
       self, readonly_context: Optional[Any] = None
@@ -233,4 +367,7 @@ class GoogleAdsGetterToolset(BaseToolset):
         self._get_campaign_details_tool,
         self._search_geo_target_constants_tool,
         self._get_geo_targets_tool,
+        self._list_portfolio_bidding_strategies_tool,
+        self._get_campaigns_by_bidding_strategy_tool,
+        self._list_shared_budgets_tool,
     ]

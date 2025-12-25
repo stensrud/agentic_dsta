@@ -21,6 +21,9 @@ from google.adk.tools.base_toolset import BaseToolset
 from google.adk.tools.function_tool import FunctionTool
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class FirestoreToolset(BaseToolset):
@@ -29,7 +32,7 @@ class FirestoreToolset(BaseToolset):
     def __init__(
         self,
         project_id: Optional[str] = None,
-        database_id: str = "dsta-agentic-firestore"
+        database_id: Optional[str] = None
     ):
         """
         Initialize Firestore toolset.
@@ -40,16 +43,22 @@ class FirestoreToolset(BaseToolset):
         """
         super().__init__()
         self._project_id = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
-        self._database_id = database_id
+        self._database_id = database_id or os.environ.get("FIRESTORE_DB")
         self._client = None
+        logger.info(f"FirestoreToolset initialized with project_id: {self._project_id}, database_id: {self._database_id}")
 
     def _get_client(self) -> firestore.Client:
         """Get or create Firestore client."""
         if self._client is None:
-            self._client = firestore.Client(
-                project=self._project_id,
-                database=self._database_id
-            )
+            logger.info("Creating new Firestore client")
+            try:
+                self._client = firestore.Client(
+                    project=self._project_id,
+                    database=self._database_id
+                )
+            except Exception as e:
+                logger.error(f"Failed to create Firestore client: {e}", exc_info=True)
+                raise
         return self._client
 
     async def get_tools(self, readonly_context: Optional[Any] = None) -> List[FunctionTool]:
@@ -78,21 +87,28 @@ class FirestoreToolset(BaseToolset):
             Document data as dictionary
         """
         client = self._get_client()
-        doc_ref = client.collection(collection).document(document_id)
-        doc = doc_ref.get()
+        logger.info(f"Getting document: {collection}/{document_id}")
+        try:
+            doc_ref = client.collection(collection).document(document_id)
+            doc = doc_ref.get()
 
-        if doc.exists:
-            return {
-                "id": doc.id,
-                "data": doc.to_dict(),
-                "exists": True
-            }
-        else:
-            return {
-                "id": document_id,
-                "exists": False,
-                "message": "Document not found"
-            }
+            if doc.exists:
+                logger.info(f"Document found: {collection}/{document_id}")
+                return {
+                    "id": doc.id,
+                    "data": doc.to_dict(),
+                    "exists": True
+                }
+            else:
+                logger.info(f"Document not found: {collection}/{document_id}")
+                return {
+                    "id": document_id,
+                    "exists": False,
+                    "message": "Document not found"
+                }
+        except Exception as e:
+            logger.error(f"Error getting document {collection}/{document_id}: {e}", exc_info=True)
+            return {"id": document_id, "exists": False, "error": str(e)}
 
     def query_collection(
         self,
@@ -120,31 +136,36 @@ class FirestoreToolset(BaseToolset):
             query_collection("users", "age", ">", 18, limit=50)  # Get users over 18
             query_collection("products", "category", "==", "electronics")  # Get electronics
         """
+        logger.info(f"Querying collection: {collection} with filter: {field} {operator} {value}, limit: {limit}")
         client = self._get_client()
-        query = client.collection(collection)
+        try:
+            query = client.collection(collection)
 
-        # Apply filter if provided
-        if field and operator and value is not None:
-            query = query.where(filter=FieldFilter(field, operator, value))
+            # Apply filter if provided
+            if field and operator and value is not None:
+                query = query.where(filter=FieldFilter(field, operator, value))
 
-        # Apply limit
-        query = query.limit(limit)
+            # Apply limit
+            query = query.limit(limit)
 
-        # Execute query
-        docs = query.stream()
+            # Execute query
+            docs = query.stream()
 
-        results = []
-        for doc in docs:
-            results.append({
-                "id": doc.id,
-                "data": doc.to_dict()
-            })
+            results = []
+            for doc in docs:
+                results.append({
+                    "id": doc.id,
+                    "data": doc.to_dict()
+                })
 
-        return {
-            "collection": collection,
-            "count": len(results),
-            "documents": results
-        }
+            return {
+                "collection": collection,
+                "count": len(results),
+                "documents": results
+            }
+        except Exception as e:
+            logger.error(f"Error querying collection {collection}: {e}", exc_info=True)
+            return {"collection": collection, "count": 0, "documents": [], "error": str(e)}
 
     def set_document(
         self,
@@ -165,22 +186,28 @@ class FirestoreToolset(BaseToolset):
         Returns:
             Confirmation of the operation
         """
+        logger.info(f"Setting document: {collection}/{document_id}, merge: {merge}")
         client = self._get_client()
-        doc_ref = client.collection(collection).document(document_id)
+        try:
+            doc_ref = client.collection(collection).document(document_id)
 
-        if merge:
-            doc_ref.set(data, merge=True)
-            operation = "merged"
-        else:
-            doc_ref.set(data)
-            operation = "set"
+            if merge:
+                doc_ref.set(data, merge=True)
+                operation = "merged"
+            else:
+                doc_ref.set(data)
+                operation = "set"
 
-        return {
-            "success": True,
-            "operation": operation,
-            "collection": collection,
-            "document_id": document_id
-        }
+            logger.info(f"Successfully {operation} document: {collection}/{document_id}")
+            return {
+                "success": True,
+                "operation": operation,
+                "collection": collection,
+                "document_id": document_id
+            }
+        except Exception as e:
+            logger.error(f"Error setting document {collection}/{document_id}: {e}", exc_info=True)
+            return {"success": False, "error": str(e), "collection": collection, "document_id": document_id}
 
     def delete_document(
         self,
@@ -197,16 +224,21 @@ class FirestoreToolset(BaseToolset):
         Returns:
             Confirmation of the deletion
         """
+        logger.info(f"Deleting document: {collection}/{document_id}")
         client = self._get_client()
-        doc_ref = client.collection(collection).document(document_id)
-        doc_ref.delete()
+        try:
+            doc_ref = client.collection(collection).document(document_id)
+            doc_ref.delete()
 
-        return {
-            "success": True,
-            "operation": "deleted",
-            "collection": collection,
-            "document_id": document_id
-        }
+            return {
+                "success": True,
+                "operation": "deleted",
+                "collection": collection,
+                "document_id": document_id
+            }
+        except Exception as e:
+            logger.error(f"Error deleting document {collection}/{document_id}: {e}", exc_info=True)
+            return {"success": False, "error": str(e), "collection": collection, "document_id": document_id}
 
     def list_collections(self) -> Dict[str, Any]:
         """
@@ -215,12 +247,17 @@ class FirestoreToolset(BaseToolset):
         Returns:
             List of collection names
         """
+        logger.info("Listing all root-level collections")
         client = self._get_client()
-        collections = client.collections()
+        try:
+            collections = client.collections()
 
-        collection_names = [col.id for col in collections]
+            collection_names = [col.id for col in collections]
 
-        return {
-            "count": len(collection_names),
-            "collections": collection_names
-        }
+            return {
+                "count": len(collection_names),
+                "collections": collection_names
+            }
+        except Exception as e:
+            logger.error(f"Error listing collections: {e}", exc_info=True)
+            return {"count": 0, "collections": [], "error": str(e)}

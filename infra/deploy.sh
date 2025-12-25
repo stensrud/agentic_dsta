@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
-set -x
 
 # Change to the script's directory to ensure relative paths are correct.
 cd "$(dirname "$0")"
@@ -64,19 +63,15 @@ REPO_NAME="${RESOURCE_PREFIX}-repo"
 TAG="latest"
 IMAGE_URL="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$TAG"
 
+# ---- Firestore DB Name ---
+FIRESTORE_DB="${RESOURCE_PREFIX}-firestore"
+
 if [ -z "$PROJECT_ID" ] || [ -z "$REGION" ] || [ -z "$RESOURCE_PREFIX" ]; then
   echo "Error: 'project_id', 'region', and 'resource_prefix' must be set in $CONFIG_FILE."
   exit 1
 fi
 
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-echo "Configuration:"
-echo $SA_NAME
-echo $TF_STATE_BUCKET
-echo $IMAGE_NAME
-echo $REPO_NAME
-echo $TAG
-echo $IMAGE_URL
 
 # 3. Set up Service Account for deployment
 echo "--- Ensuring deployment Service Account '$SA_NAME' exists and has permissions ---"
@@ -241,7 +236,7 @@ echo "--- Appending image_url to terraform.tfvars ---"
 sed -i '/^image_url/d' "$TFVARS_FILE"
 echo "image_url = \"$IMAGE_URL\"" >> "$TFVARS_FILE"
 
-# 9. Enable Cloud Resource Manager API
+# 9. Enable Cloud Resource Manager APIgcloud auth print-access-token --impersonate-service-account="$SA_EMAIL"
 # This API is a prerequisite for Terraform to be able to read or enable other APIs.
 # We enable it here directly to prevent race conditions during Terraform's plan phase.
 echo "--- Enabling prerequisite Cloud Resource Manager API ---"
@@ -266,7 +261,7 @@ echo "--- Importing existing resources into Terraform state ---"
 
 # Firestore Database
 terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
-  module.firestore.google_firestore_database.database projects/${PROJECT_ID}/databases/dsta-agentic-firestore || echo "Firestore Database import failed or already imported."
+  module.firestore.google_firestore_database.database projects/${PROJECT_ID}/databases/${FIRESTORE_DB} || echo "Firestore Database import failed or already imported."
 
 # Secret Manager Secrets
 echo "--- Importing Secrets ---"

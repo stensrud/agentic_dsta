@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Firestore Agent - Agent for managing Google Cloud Firestore data."""
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+)
 
 from google.adk import agents
 from .tools.firestore_toolset import FirestoreToolset
@@ -19,10 +25,10 @@ from .tools.firestore_toolset import FirestoreToolset
 import os
 
 # The root_agent definition for the firestore_agent.
-model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
 
 # Read the prompt from the external file.
-with open(os.path.join(os.path.dirname(__file__), "prompt.txt"), "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "prompt.txt"), "r", encoding='utf-8') as f:
     prompt = f.read()
 
 root_agent = agents.LlmAgent(

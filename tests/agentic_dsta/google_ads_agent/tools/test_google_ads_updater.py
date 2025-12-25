@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from agentic_dsta.google_ads_agent.tools import google_ads_updater
+import google.auth.exceptions
 from google.ads.googleads.errors import GoogleAdsException
 
 
@@ -19,8 +20,9 @@ class TestGoogleAdsUpdater(unittest.TestCase):
         "GOOGLE_ADS_REFRESH_TOKEN": "mock-refresh-token",
         "GOOGLE_ADS_DEVELOPER_TOKEN": "mock-developer-token",
     })
-    @patch('google.ads.googleads.client.GoogleAdsClient.load_from_dict')
-    def test_get_google_ads_client_with_oauth(self, mock_load_from_dict):
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_client.google.ads.googleads.client.GoogleAdsClient.load_from_dict')
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_client.google.auth.default', side_effect=google.auth.exceptions.DefaultCredentialsError)
+    def test_get_google_ads_client_with_oauth(self, mock_google_auth_default, mock_load_from_dict):
         google_ads_updater.get_google_ads_client("12345")
         mock_load_from_dict.assert_called_with({
             "login_customer_id": "12345",
@@ -32,8 +34,9 @@ class TestGoogleAdsUpdater(unittest.TestCase):
             "use_proto_plus": True,
         })
 
-    @patch('google.ads.googleads.client.GoogleAdsClient.load_from_dict', side_effect=GoogleAdsException(None, None, MagicMock(), "request_id"))
-    def test_get_google_ads_client_exception(self, mock_load_from_dict):
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_client.google.ads.googleads.client.GoogleAdsClient.load_from_dict', side_effect=GoogleAdsException(None, None, MagicMock(), "request_id"))
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_client.google.auth.default', side_effect=google.auth.exceptions.DefaultCredentialsError)
+    def test_get_google_ads_client_exception(self, mock_google_auth_default, mock_load_from_dict):
         client = google_ads_updater.get_google_ads_client("12345")
         self.assertIsNone(client)
 
@@ -99,7 +102,37 @@ class TestGoogleAdsUpdater(unittest.TestCase):
     def test_google_ads_updater_toolset(self):
         toolset = google_ads_updater.GoogleAdsUpdaterToolset()
         tools = asyncio.run(toolset.get_tools())
-        self.assertEqual(len(tools), 4)
+        self.assertEqual(len(tools), 7)
+
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_updater.get_google_ads_client')
+    def test_update_shared_budget_success(self, mock_get_google_ads_client):
+        mock_client = MagicMock()
+        mock_budget_service = MagicMock()
+        mock_client.get_service.return_value = mock_budget_service
+        mock_get_google_ads_client.return_value = mock_client
+
+        mock_budget_service.mutate_campaign_budgets.return_value = MagicMock(results=[MagicMock(resource_name="test_resource")])
+
+        result = google_ads_updater.update_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
+        self.assertTrue(result['success'])
+        mock_budget_service.mutate_campaign_budgets.assert_called_once()
+
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_updater.get_google_ads_client')
+    def test_update_shared_budget_exception(self, mock_get_google_ads_client):
+        mock_client = MagicMock()
+        mock_budget_service = MagicMock()
+        mock_client.get_service.return_value = mock_budget_service
+        mock_get_google_ads_client.return_value = mock_client
+
+        mock_budget_service.mutate_campaign_budgets.side_effect = GoogleAdsException(None, None, MagicMock(), "request_id")
+
+        result = google_ads_updater.update_shared_budget("12345", "budgets/123", 600000)
+        self.assertIn('error', result)
+
+    @patch('agentic_dsta.google_ads_agent.tools.google_ads_updater.get_google_ads_client', return_value=None)
+    def test_update_shared_budget_client_fail(self, mock_get_google_ads_client):
+        result = google_ads_updater.update_shared_budget("12345", "budgets/123", 600000)
+        self.assertEqual(result, {'error': 'Failed to get Google Ads client.'})
 
 if __name__ == '__main__':
     unittest.main()

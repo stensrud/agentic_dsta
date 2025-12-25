@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Decision agent for managing marketing campaigns."""
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+)
 
 import os
 from api_hub_agent.tools.apihub_toolset import DynamicMultiAPIToolset

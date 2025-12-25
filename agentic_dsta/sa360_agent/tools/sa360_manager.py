@@ -20,6 +20,10 @@ from google.adk.tools.function_tool import FunctionTool
 import google.ads.googleads.client
 from google.ads.googleads.errors import GoogleAdsException
 from google.protobuf import field_mask_pb2
+import logging
+from agentic_dsta.core.logging_config import setup_logging
+
+logger = logging.getLogger(__name__)
 
 
 def list_accessible_customers():
@@ -41,9 +45,9 @@ def list_accessible_customers():
     response = customer_service.list_accessible_customers()
     return {"accessible_customers": response.resource_names}
   except GoogleAdsException as ex:
-    print(f"Failed to list accessible customers: {ex}")
+    logger.error(f"Failed to list accessible customers: {ex}", exc_info=True)
     for error in ex.failure.errors:
-      print(f"Error: {error.error_code.name} - {error.message}")
+      logger.error(f"Google Ads API Error: {str(error.error_code)} - {error.message}", extra={'error_code': str(error.error_code), 'error_message': error.message})
     return {"error": f"Failed to list accessible customers: {ex.failure}"}
 
 
@@ -74,9 +78,9 @@ def get_google_ads_client(customer_id: str):
     )
     return client
   except GoogleAdsException as ex:
-    print(f"Failed to create GoogleAdsClient: {ex}")
+    logger.error(f"Failed to create GoogleAdsClient: {ex}", exc_info=True, extra={'customer_id': customer_id})
     for error in ex.failure.errors:
-      print(f"Error: {error.error_code.name} - {error.message}")
+      logger.error(f"Google Ads API Error: {str(error.error_code)} - {error.message}", extra={'customer_id': customer_id, 'error_code': str(error.error_code), 'error_message': error.message})
     return None
 
 
@@ -126,12 +130,12 @@ def update_campaign_status(customer_id: str, campaign_id: str, status: str):
   try:
     response = campaign_service.mutate_campaigns(request=request)
     campaign_response = response.results[0]
-    print(f"Updated campaign '{campaign_response.resource_name}'")
+    logger.info(f"Updated campaign '{campaign_response.resource_name}'", extra={'customer_id': customer_id, 'campaign_id': campaign_id, 'resource_name': campaign_response.resource_name})
     return {"success": True, "resource_name": campaign_response.resource_name}
   except GoogleAdsException as ex:
-    print(f"Failed to update campaign: {ex}")
+    logger.error(f"Failed to update campaign: {ex}", exc_info=True, extra={'customer_id': customer_id, 'campaign_id': campaign_id, 'status': status})
     for error in ex.failure.errors:
-      print(f"Error: {error.error_code.name} - {error.message}")
+      logger.error(f"Google Ads API Error: {error.error_code.name} - {error.message}", extra={'customer_id': customer_id, 'campaign_id': campaign_id, 'error_code': error.error_code.name, 'error_message': error.message})
     return {"error": f"Failed to update campaign: {ex.failure}"}
 
 

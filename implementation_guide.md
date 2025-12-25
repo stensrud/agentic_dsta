@@ -18,8 +18,26 @@ The core of this solution is a multi-agent framework built with the Application 
     *   **Fetching Campaign Details:** Retrieve a full overview of a campaign's settings and current status.
     *   **Updating Campaign Status:** Programmatically pause or enable campaigns.
     *   **Modifying Campaign Budgets:** Adjust the budget for any campaign.
+    *   **Updating Campaign Bidding Strategies:** Change the bidding strategy of a *campaign*. Supported standard strategies include:
+        *   `MAXIMIZE_CONVERSIONS` (Optionally with `target_cpa_micros` in `strategy_details`)
+        *   `MAXIMIZE_CONVERSION_VALUE` (Optionally with `target_roas` in `strategy_details`)
+        *   `MANUAL_CPC` (Optionally with `enhanced_cpc_enabled` in `strategy_details`)
+        *   `TARGET_SPEND`
+        *   `TARGET_IMPRESSION_SHARE`: Requires `strategy_details` with `location` (e.g., `ANYWHERE_ON_PAGE`) and `location_fraction_micros` (e.g., 500000 for 50%).
+        *   `MANUAL_CPM`
+        *   `MANUAL_CPV`
+        *   `PERCENT_CPC`
+        *   `COMMISSION`
+        *   Can also switch to a portfolio bidding strategy by providing the resource name.
+    *   **Updating Portfolio Bidding Strategies:** Modify an existing *portfolio* bidding strategy's type and parameters using the `update_portfolio_bidding_strategy` tool. Supported types include:
+        *   `MAXIMIZE_CONVERSIONS` (Optionally with `target_cpa_micros`)
+        *   `TARGET_CPA` (Requires `target_cpa_micros`)
+        *   `TARGET_ROAS` (Requires `target_roas`)
+        *   `TARGET_SPEND` (Optionally with `cpc_bid_ceiling_micros`)
     *   **Managing Geo-Targeting:** Update the geographic targeting for campaigns and ad groups by adding or removing location IDs.
     *   **Searching for Geo-Targets:** Look up geo-target constants by location name (e.g., "New York City") to find the correct IDs for targeting.
+    *   **Listing Shared Budgets:** Retrieve a list of all explicitly shared budgets in the account that are currently enabled.
+    *   **Updating Shared Budgets:** Modify the amount of an existing explicitly shared budget using its resource name.
 *   **SA360 Agent:** This agent is designed for Search Ads 360 management. It uses a Google Sheet as an intermediary for bulk updates. Its tools can modify this sheet to change campaign statuses, which are then uploaded by the user to SA360.
 *   **Decision Agent:** This is the orchestrator agent responsible for automated execution. It takes a high-level goal (e.g., from the Cloud Scheduler job), uses the other agents to gather data, and then delegates campaign management tasks based on the retrieved information and business rules.
 *   **Marketing Agent:** This is the same orchestrator agent as the Decision Agent, but it is intended for interactive use through the ADK web UI. It allows a user to interact with all the available tools at once to perform complex tasks and act on campaigns in a conversational manner.
@@ -68,19 +86,22 @@ The following diagram illustrates the architecture of the Agentic Dynamic Signal
     gcloud config set project [YOUR_PROJECT_ID]
     ```
 
-*   The user or service account running the deployment must have the `roles/owner` permission on the project, or a combination of the following roles:
-    *   `roles/editor`
-    *   `roles/project.iamAdmin`
+*   The user or principal running the `deploy.sh` script for the *first time* needs sufficient permissions to create and configure service accounts, IAM policies, and other project resources. The `roles/owner` role is the simplest way to ensure this. Alternatively, a combination of roles like `roles/editor`, `roles/resourcemanager.projectIamAdmin`, `roles/iam.serviceAccountAdmin`, `roles/serviceusage.serviceUsageAdmin`, etc., would be required.
+*   The `deploy.sh` script creates a dedicated service account (`<resource_prefix>-deployer@<project_id>.iam.gserviceaccount.com`) and grants it a specific set of roles required to deploy and manage the application infrastructure. These roles include, but are not limited to:
+    *   `roles/viewer`
     *   `roles/serviceusage.serviceUsageAdmin`
     *   `roles/storage.admin`
     *   `roles/cloudbuild.builds.editor`
     *   `roles/artifactregistry.admin`
     *   `roles/run.admin`
-    *   `roles/iam.serviceAccountAdmin`
-    *   `roles/secretmanager.admin`
-    *   `roles/iam.serviceAccountViewer`
+    *   `roles/iam.serviceAccountUser`
     *   `roles/iam.serviceAccountTokenCreator`
-    * [TBD]
+    *   `roles/secretmanager.admin`
+    *   `roles/cloudscheduler.admin`
+    *   `roles/firebase.admin`
+    *   `roles/apihub.admin`
+    *   And others as defined in `infra/deploy.sh`.
+*   Subsequent runs of `deploy.sh` use this service account's permissions via impersonation.
 
 ### 5.1.1 API Hub Setup
 
@@ -347,7 +368,49 @@ If your new API requires its own unique key for security or tracking purposes, y
 
 Once the script completes, the agent will have immediate access to the new key and will dynamically load the new API on its next run.
 
-## 11. Usage
+## 11. Logging
+
+The solution uses a centralized logging system configured in `agentic_dsta/core/logging_config.py`. Logs are output as JSON objects to standard output, making them suitable for ingestion and analysis in Google Cloud Logging.
+
+### Log Format
+
+Each log entry is a JSON object with the following keys:
+
+-   `timestamp`: ISO 8601 format UTC timestamp.
+-   `severity`: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+-   `message`: The log message.
+-   `logger_name`: Name of the logger instance (e.g., `agentic_dsta.google_ads_agent.tools.google_ads_getter`).
+-   `code_function`: Function name where the log was emitted.
+-   `code_line`: Line number where the log was emitted.
+-   `exception`: Stack trace if an exception occurred.
+-   Additional context fields passed via `extra` in logger calls (e.g., `customer_id`, `campaign_id`).
+
+### Configuring Log Level
+
+The log level can be configured using the `LOG_LEVEL` environment variable. Default is `INFO`.
+Example: `LOG_LEVEL=DEBUG`
+
+### Viewing Logs in Cloud Logging
+
+When deployed on Cloud Run, these JSON logs will be automatically parsed by Cloud Logging. You can view and query them in the Logs Explorer. The JSON fields will be under the `jsonPayload` field.
+
+Example Query:
+```
+resource.type="cloud_run_revision"
+resource.labels.service_name="[YOUR_SERVICE_NAME]"
+jsonPayload.severity="ERROR"
+jsonPayload.customer_id="1234567890"
+```
+
+### Error Handling
+
+-   Errors within the agent tools, especially those involving API calls like the Google Ads API, are generally caught.
+-   Detailed error information is logged in the JSON format mentioned above, typically with `severity: ERROR`.
+-   For Google Ads API errors, the `exception` field in the log will often contain the stack trace, and the log message will include specific error codes and messages from the API (e.g., `error.error_code.name`, `error.message`).
+-   The tools return a dictionary. On failure, this dictionary usually contains an `error` key with a descriptive message and sometimes a `details` key with more specific error information (like the list of errors from a `GoogleAdsException`).
+-   Internal Refactoring: The logic for applying bidding strategy details has been centralized into a helper function `_apply_bidding_strategy_details` within `google_ads_updater.py` for better maintainability.
+
+## 12. Usage
 
 This deployment provides two primary ways to interact with the agentic framework:
 
@@ -397,10 +460,11 @@ To estimate the cost, use the [Google Cloud Pricing Calculator](https://cloud.go
 
 ## 14. Destroying the Infrastructure
 
-To tear down all the resources created by this deployment, run the following command from the `infra` directory:
+To tear down all the resources created by this deployment, it is recommended to use the `destroy.sh` script from the `infra` directory. This script handles the necessary authentication setup and ensures a cleaner teardown process:
 
 ```bash
-terraform destroy
+cd infra
+bash destroy.sh
 ```
 
-You will be prompted to confirm the destruction of the resources. Type `yes` to proceed.
+The script will prompt for confirmation before destroying the resources. This will remove all the Google Cloud resources managed by Terraform in this solution.
