@@ -9,7 +9,7 @@ from googleapiclient.errors import HttpError
 from .sa360_utils import get_sheets_service
 
 
-def get_campaign_details(campaign_id: str, _SHEET_ID: str, _SHEET_NAME: str) -> Dict[str, Any]:
+def get_campaign_details(campaign_id: str, sheet_id: str, sheet_name: str) -> Dict[str, Any]:
   """Fetches details for a specific SA360 campaign from the Google Sheet.
 
   Args:
@@ -25,12 +25,12 @@ def get_campaign_details(campaign_id: str, _SHEET_ID: str, _SHEET_NAME: str) -> 
     sheet = service.spreadsheets()
     result = (
         sheet.values()
-        .get(spreadsheetId=_SHEET_ID, range=_SHEET_NAME)
+        .get(spreadsheetId=sheet_id, range=sheet_name)
         .execute()
     )
     values = result.get("values", [])
     if not values:
-      raise ValueError(f"No data found in sheet '{_SHEET_NAME}'.")
+      raise ValueError(f"No data found in sheet '{sheet_name}'.")
 
     header = values[0]
     campaign_id_index = header.index("Campaign ID")
@@ -47,7 +47,7 @@ def get_campaign_details(campaign_id: str, _SHEET_ID: str, _SHEET_NAME: str) -> 
 
 
 def _update_campaign_property(
-    campaign_id: str, property_name: str, property_value: Any, _SHEET_ID: str, _SHEET_NAME: str
+    campaign_id: str, property_name: str, property_value: Any, sheet_id: str, sheet_name: str
 ) -> Dict[str, Any]:
   """Helper function to update a property for a campaign in the Google Sheet."""
   service = get_sheets_service()
@@ -58,13 +58,13 @@ def _update_campaign_property(
     sheet = service.spreadsheets()
     result = (
         sheet.values()
-        .get(spreadsheetId=_SHEET_ID, range=_SHEET_NAME)
+        .get(spreadsheetId=sheet_id, range=sheet_name)
         .execute()
     )
     values = result.get("values", [])
 
     if not values:
-      raise ValueError(f"No data found in sheet '{_SHEET_NAME}'.")
+      raise ValueError(f"No data found in sheet '{sheet_name}'.")
 
     header = values[0]
     try:
@@ -84,11 +84,11 @@ def _update_campaign_property(
       raise ValueError(f"Campaign with ID '{campaign_id}' not found.")
 
     property_column_letter = chr(ord("A") + property_index)
-    range_to_update = f"{_SHEET_NAME}!{property_column_letter}{row_to_update}"
+    range_to_update = f"{sheet_name}!{property_column_letter}{row_to_update}"
 
     body = {"values": [[property_value]]}
     sheet.values().update(
-        spreadsheetId=_SHEET_ID,
+        spreadsheetId=sheet_id,
         range=range_to_update,
         valueInputOption="RAW",
         body=body,
@@ -104,40 +104,46 @@ def _update_campaign_property(
   except (HttpError, IndexError) as err:
     logging.exception(err)
     raise RuntimeError(f"Failed to update campaign property: {err}") from err
+  
 
+def update_campaign_status(
+    campaign_id: str, status: str, sheet_id: str, sheet_name: str
+) -> Dict[str, Any]:
+  """Updates the status of an SA360 campaign to 'ENABLED' or 'PAUSED'.
 
-def enable_campaign(campaign_id: str, _SHEET_ID: str, _SHEET_NAME: str) -> Dict[str, Any]:
-  """Enables an SA360 campaign by setting its status to 'ENABLED'."""
+  Args:
+      campaign_id: The ID of the campaign to update.
+      status: The new status for the campaign ('ENABLED' or 'PAUSED').
+
+  Returns:
+      A dictionary containing a success or error message.
+  """
+  upper_status = status.upper()
+  if upper_status not in ["ENABLED", "PAUSED"]:
+    return {"error": "Status must be either 'ENABLED' or 'PAUSED'."}
   return _update_campaign_property(
-      campaign_id, "Campaign status", "ENABLED", _SHEET_ID, _SHEET_NAME
-  )
-
-
-def disable_campaign(campaign_id: str, _SHEET_ID: str, _SHEET_NAME: str) -> Dict[str, Any]:
-  """Disables an SA360 campaign by setting its status to 'PAUSED'."""
-  return _update_campaign_property(
-      campaign_id, "Campaign status", "PAUSED", _SHEET_ID, _SHEET_NAME
+      campaign_id, "Campaign status", upper_status, sheet_id, sheet_name
   )
 
 
 def update_campaign_geolocation(
-    campaign_id: str, location_name: str, _SHEET_ID: str, _SHEET_NAME: str
+    campaign_id: str, location_name: str, sheet_id: str, sheet_name: str
 ) -> Dict[str, Any]:
   """Updates the geo-targeting for an SA360 campaign in the Google Sheet."""
   return _update_campaign_property(
-      campaign_id, "Location", location_name, _SHEET_ID, _SHEET_NAME
+      campaign_id, "Location", location_name, sheet_id, sheet_name
   )
 
 
 def update_campaign_budget(
-    campaign_id: str, budget: float, _SHEET_ID: str, _SHEET_NAME: str
+    campaign_id: str, budget: float, sheet_id: str, sheet_name: str
 ) -> Dict[str, Any]:
   """Updates the budget for an SA360 campaign in the Google Sheet."""
-  return _update_campaign_property(campaign_id, "Budget", budget, _SHEET_ID, _SHEET_NAME)
+  return _update_campaign_property(campaign_id, "Budget", budget, sheet_id, sheet_name)
 
 
 def remove_campaign_geolocation(
-    campaign_id: str, location_name: str, _SHEET_ID: str, _SHEET_NAME: str
+    campaign_id: str, location_name: str, sheet_id: str, sheet_name: str
 ) -> Dict[str, Any]:
   """Creates a new record in the sheet to remove a geo-location for a campaign.
 
@@ -154,7 +160,7 @@ def remove_campaign_geolocation(
   Returns:
       A dictionary containing a success or error message.
   """
-  details = get_campaign_details(campaign_id, _SHEET_ID, _SHEET_NAME)
+  details = get_campaign_details(campaign_id, sheet_id, sheet_name)
   if "error" in details:
     return details
 
@@ -167,12 +173,12 @@ def remove_campaign_geolocation(
     # Get header row to determine column order
     header_result = (
         sheet.values()
-        .get(spreadsheetId=_SHEET_ID, range=f"{_SHEET_NAME}!1:1")
+        .get(spreadsheetId=sheet_id, range=f"{sheet_name}!1:1")
         .execute()
     )
     header = header_result.get("values", [[]])[0]
     if not header:
-      raise ValueError(f"Could not read header row from the sheet.")
+      raise ValueError("Could not read header row from the sheet.")
 
     # Check for required columns for this operation
     if "Associated Campaign ID" not in header:
@@ -198,8 +204,8 @@ def remove_campaign_geolocation(
 
     # Append the new row to the sheet
     sheet.values().append(
-        spreadsheetId=_SHEET_ID,
-        range=_SHEET_NAME,
+        spreadsheetId=sheet_id,
+        range=sheet_name,
         valueInputOption="RAW",
         body={"values": [new_row_values]},
     ).execute()
@@ -226,14 +232,14 @@ class SA360Toolset(BaseToolset):
     self._get_campaign_details_tool = FunctionTool(
         func=get_campaign_details,
     )
-    self._enable_campaign_tool = FunctionTool(func=enable_campaign)
-    self._disable_campaign_tool = FunctionTool(func=disable_campaign)
+    self._update_campaign_status_tool = FunctionTool(func=update_campaign_status)
     self._update_campaign_geolocation_tool = FunctionTool(
         func=update_campaign_geolocation
     )
     self._update_campaign_budget_tool = FunctionTool(
         func=update_campaign_budget
     )
+    self._update_campaign_bids_tool = FunctionTool(func=update_campaign_bids)
     self._remove_campaign_geolocation_tool = FunctionTool(
         func=remove_campaign_geolocation
     )
@@ -244,9 +250,9 @@ class SA360Toolset(BaseToolset):
     """Returns a list of tools in this toolset."""
     return [
         self._get_campaign_details_tool,
-        self._enable_campaign_tool,
-        self._disable_campaign_tool,
+        self._update_campaign_status_tool,
         self._update_campaign_geolocation_tool,
         self._update_campaign_budget_tool,
+        self._update_campaign_bids_tool,
         self._remove_campaign_geolocation_tool,
     ]
