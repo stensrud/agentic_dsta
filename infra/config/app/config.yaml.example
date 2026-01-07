@@ -1,0 +1,21 @@
+# Google Cloud Project Configuration
+project_id: "YOUR_PROJECT_ID"
+region: "YOUR_REGION"
+
+# Resource Naming
+resource_prefix: "YOUR_RESOURCE_PREFIX"
+allow_unauthenticated: true
+
+# Firestore Configuration
+firestore_database_type: "FIRESTORE_NATIVE"
+
+#Scheduler Cron
+sa_run_sse_scheduler_job_schedule: "5 10 * * *"
+
+
+additional_secrets: []
+#  - MY_CUSTOM_API_KEY
+#  - ANOTHER_API_SECRET
+
+#Google Ads Customer ID to be triggered from cloud scheduler
+customer_id: "YOUR_CUSTOMER_ID"

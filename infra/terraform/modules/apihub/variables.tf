@@ -58,5 +58,5 @@ variable "spec_files" {
 variable "init_script_path" {
   description = "Path to API Hub initialization script."
   type        = string
-  default     = "../../scripts/init_apihub.sh"
+  default     = "../../../scripts/apihub/init_apihub.sh"
 }

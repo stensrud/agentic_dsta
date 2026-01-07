@@ -35,7 +35,7 @@ echo "3. Building and Pushing container image to: $IMAGE_URL"
 # Determine the source directory relative to this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The source directory is two levels up from the script directory
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 SOURCE_DIR="$PROJECT_ROOT/agentic_dsta"
 
 if [ ! -d "$SOURCE_DIR" ]; then

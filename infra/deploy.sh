@@ -14,10 +14,10 @@ cleanup() {
 trap cleanup EXIT
 
 # --- Configuration ---
-CONFIG_FILE="config.yaml"
-TFVARS_FILE="terraform.tfvars"
-IMAGE_BUILD_SCRIPT="./scripts/build_image.sh"
-TFVARS_GEN_SCRIPT="./scripts/generate_tfvars.py"
+CONFIG_FILE="config/app/config.yaml"
+TFVARS_FILE="terraform/terraform.tfvars"
+IMAGE_BUILD_SCRIPT="./scripts/deployment/build_image.sh"
+TFVARS_GEN_SCRIPT="./scripts/deployment/generate_tfvars.py"
 
 # --- Functions ---
 function get_config_value() {
@@ -57,7 +57,7 @@ ADDITIONAL_SECRETS=$(python3 -c "import yaml; print(' '.join(yaml.safe_load(open
 # --- Derived Resource Names ---
 SA_NAME="${RESOURCE_PREFIX}-deployer"
 # Append the project ID to the bucket name to ensure global uniqueness.
-TF_STATE_BUCKET="agentic-dsta-tf-state-${PROJECT_ID}"
+TF_STATE_BUCKET="agentic-dsta-tf-state-v5-${PROJECT_ID}"
 IMAGE_NAME="${RESOURCE_PREFIX}-image"
 REPO_NAME="${RESOURCE_PREFIX}-repo"
 TAG="latest"
@@ -252,7 +252,7 @@ if [ -z "$ACCESS_TOKEN" ]; then
     exit 1
 fi
 
-terraform init -upgrade -reconfigure \
+terraform -chdir=terraform init -upgrade -reconfigure \
   -backend-config="bucket=$TF_STATE_BUCKET" \
   -backend-config="access_token=$ACCESS_TOKEN"
 
@@ -260,7 +260,7 @@ terraform init -upgrade -reconfigure \
 echo "--- Importing existing resources into Terraform state ---"
 
 # Firestore Database
-terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
+terraform -chdir=terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
   module.firestore.google_firestore_database.database projects/${PROJECT_ID}/databases/${FIRESTORE_DB} || echo "Firestore Database import failed or already imported."
 
 # Secret Manager Secrets
@@ -269,7 +269,7 @@ echo "--- Importing Secrets ---"
 # Additional secrets from config.yaml
 for secret_name in ${ADDITIONAL_SECRETS}; do
   echo "Attempting to import secret: ${secret_name}"
-  terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
+  terraform -chdir=terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
   "module.secret_manager.google_secret_manager_secret.secrets[\"${secret_name}\"]" projects/${PROJECT_ID}/secrets/${secret_name} || echo "${secret_name} import failed or already imported."
 done
 
@@ -282,9 +282,29 @@ echo "Terraform will now ask you to enter the required secret values."
 echo "Please paste the values in the format: { \"SECRET_NAME_1\" = \"value1\", \"SECRET_NAME_2\" = \"value2\" }"
 echo "Note: The input will be hidden for security."
 export GOOGLE_OAUTH_ACCESS_TOKEN="$ACCESS_TOKEN"
-terraform apply -var-file="$TFVARS_FILE" \
+terraform -chdir=terraform apply -auto-approve -var-file="terraform.tfvars" \
   -var="access_token=$ACCESS_TOKEN"
 
 echo "--- Deployment complete! ---"
 
+# 12. Upload Google Ads Configuration to Firestore
+echo "--- Uploading Google Ads Configuration to Firestore ---"
+CONFIG_JSON="./config/samples/firestore_config.json"
+UPLOAD_SCRIPT="./scripts/deployment/upload_config.py"
+
+if [ -f "$CONFIG_JSON" ] && [ -f "$UPLOAD_SCRIPT" ]; then
+    echo "   Uploading config from $CONFIG_JSON..."
+    # Reuse the ACCESS_TOKEN generated earlier
+    python3 "$UPLOAD_SCRIPT" \
+        --project_id "$PROJECT_ID" \
+        --database "$FIRESTORE_DB" \
+        --config "$CONFIG_JSON" \
+        --access_token "$ACCESS_TOKEN" || {
+            echo "Error: Failed to upload configuration to Firestore."
+            exit 1
+        }
+    echo "✅ Configuration uploaded successfully."
+else
+    echo "Warning: Configuration file or upload script not found. Skipping upload."
+fi
 # The cleanup function will be called automatically on exit.

@@ -21,9 +21,8 @@ locals {
   run_sa_account_id                  = "${var.resource_prefix}-runner"
   firestore_database_name            = "${var.resource_prefix}-firestore"
   artifact_repository_id             = "${var.resource_prefix}-repo"
-  storage_bucket_name                = "${var.resource_prefix}-bucket"
-  sa_session_init_scheduler_job_name = "${var.resource_prefix}-sa-session-init-job"
-  sa_run_sse_scheduler_job_name      = "${var.resource_prefix}-sa-run-sse-job"
+
+  sa_combined_scheduler_job_name     = "${var.resource_prefix}-sa-combined-job"
 }
 
 # Service Account for Cloud Run
@@ -75,34 +74,7 @@ module "apihub" {
   depends_on = [google_project_service.apis]
 }
 
-/*
- # Module for creating Google Cloud Storage buckets
- module "storage" {
-   source     = "./modules/storage"
-   project_id = var.project_id
-   buckets = {
-     "${local.storage_bucket_name}-${var.project_id}" = {
-       location                    = "US"
-       storage_class               = "STANDARD"
-       force_destroy               = false
-       uniform_bucket_level_access = true
-       public_access_prevention    = "enforced"
-       retention_duration_seconds  = 604800
-       labels                      = {}
-     },
-     # Using the manually created bucket name without project ID suffix
-     "${var.resource_prefix}-tf-state" = {
-       location                    = "US"
-       storage_class               = "STANDARD"
-       force_destroy               = false
-       uniform_bucket_level_access = false
-       public_access_prevention    = "inherited"
-       retention_duration_seconds  = 604800
-       labels                      = {}
-     }
-   }
- }
-*/
+
 
 module "artifact_registry" {
   source        = "./modules/artifact_registry"
@@ -135,60 +107,12 @@ module "cloud_run_service" {
 }
 
 
-
-locals {
-  session_id = "session-${timestamp()}"
-}
-
-# Scheduler job for sa-session-init-job
-resource "google_cloud_scheduler_job" "sa_session_init_job" {
+# Combined Scheduler Job for Decision Agent
+resource "google_cloud_scheduler_job" "sa_combined_job" {
   project          = var.project_id
   region           = var.region
-  name             = local.sa_session_init_scheduler_job_name
-  description      = var.sa_session_init_scheduler_job_description
-  schedule         = var.sa_session_init_scheduler_job_schedule
-  time_zone        = var.sa_session_init_scheduler_job_timezone
-  attempt_deadline = var.sa_session_init_scheduler_job_attempt_deadline
-
-  retry_config {
-    retry_count          = 0
-    max_retry_duration   = "0s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "3600s"
-    max_doublings        = 5
-  }
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.cloud_run_service.service_url}/apps/decision_agent/users/${google_service_account.run_sa.email}/sessions"
-    body = base64encode(jsonencode({
-      app_name = "decision_agent"
-      user_id  = google_service_account.run_sa.email
-      session_id = local.session_id
-      new_message = {
-        role  = "user"
-        parts = [{ text = var.scheduler_new_message_text }]
-      }
-      streaming = false
-    }))
-    headers = {
-      "Content-Type" = "application/json"
-      "User-Agent"   = "Google-Cloud-Scheduler"
-    }
-
-    oidc_token {
-      service_account_email = google_service_account.run_sa.email
-      audience              = "${module.cloud_run_service.service_url}/apps/decision_agent/users/${google_service_account.run_sa.email}/sessions"
-    }
-  }
-}
-
-# Scheduler job for sa-run-sse-job
-resource "google_cloud_scheduler_job" "sa_run_sse_job" {
-  project          = var.project_id
-  region           = var.region
-  name             = local.sa_run_sse_scheduler_job_name
-  description      = var.sa_run_sse_scheduler_job_description
+  name             = local.sa_combined_scheduler_job_name
+  description      = "Combined job to init session and run agent"
   schedule         = var.sa_run_sse_scheduler_job_schedule
   time_zone        = var.sa_run_sse_scheduler_job_timezone
   attempt_deadline = var.sa_run_sse_scheduler_job_attempt_deadline
@@ -203,16 +127,11 @@ resource "google_cloud_scheduler_job" "sa_run_sse_job" {
 
   http_target {
     http_method = "POST"
-    uri         = "${module.cloud_run_service.service_url}/run_sse"
+    uri         = "${module.cloud_run_service.service_url}/scheduler/init_and_run"
     body = base64encode(jsonencode({
       app_name = "decision_agent"
       user_id  = google_service_account.run_sa.email
-      session_id = local.session_id
-      new_message = {
-        role  = "user"
-        parts = [{ text = var.scheduler_new_message_text }]
-      }
-      streaming = false
+      customer_id = var.customer_id
     }))
     headers = {
       "Content-Type" = "application/json"
@@ -221,7 +140,7 @@ resource "google_cloud_scheduler_job" "sa_run_sse_job" {
 
     oidc_token {
       service_account_email = google_service_account.run_sa.email
-      audience              ="${module.cloud_run_service.service_url}/run_sse"
+      audience              = "${module.cloud_run_service.service_url}/scheduler/init_and_run"
     }
   }
 }
@@ -231,15 +150,10 @@ resource "google_cloud_scheduler_job" "sa_run_sse_job" {
 # --- Scheduler Verification Outputs ---
 output "scheduler_target_uri" {
   description = "The target URI being used for scheduler jobs"
-  value       = "${module.cloud_run_service.service_url}/run_sse"
+  value       = "${module.cloud_run_service.service_url}/scheduler/init_and_run"
 }
 
 output "scheduler_oidc_service_account" {
   description = "The service account email being used for scheduler OIDC tokens"
   value       = google_service_account.run_sa.email
-}
-
-output "scheduler_session_id" {
-  description = "The dynamic session ID being used for scheduler jobs"
-  value       = local.session_id
 }

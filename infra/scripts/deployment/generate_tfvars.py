@@ -16,6 +16,9 @@ def yaml_to_tfvars(yaml_file, tfvars_file):
                 f.write(f'{key} = "{value}"\n')
             elif isinstance(value, bool):
                 f.write(f'{key} = {str(value).lower()}\n')
+            elif isinstance(value, list):
+                # Convert list to string and replace single quotes with double quotes for Terraform
+                f.write(f'{key} = {str(value).replace("\'" , "\"")}\n')
             else:
                 f.write(f'{key} = {value}\n')
 

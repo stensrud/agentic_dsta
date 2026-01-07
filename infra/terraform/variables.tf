@@ -95,47 +95,7 @@ variable "run_sa_roles" {
   ]
 }
 
-variable "storage_bucket_name" {
-  description = "The name of the storage bucket"
-  type        = string
-  default     = null
-}
 
-variable "storage_bucket_location" {
-  description = "The location of the storage bucket"
-  type        = string
-  default     = "US"
-}
-
-variable "storage_bucket_storage_class" {
-  description = "The storage class of the storage bucket"
-  type        = string
-  default     = "STANDARD"
-}
-
-variable "storage_bucket_force_destroy" {
-  description = "Whether to force destroy the storage bucket"
-  type        = bool
-  default     = false
-}
-
-variable "storage_bucket_uniform_bucket_level_access" {
-  description = "Whether to enable uniform bucket level access"
-  type        = bool
-  default     = true
-}
-
-variable "storage_bucket_public_access_prevention" {
-  description = "The public access prevention setting for the storage bucket"
-  type        = string
-  default     = "enforced"
-}
-
-variable "storage_bucket_retention_duration_seconds" {
-  description = "The retention duration in seconds for the storage bucket"
-  type        = number
-  default     = 604800
-}
 
 variable "scheduler_sa_account_id" {
   description = "The account id for the scheduler service account"
@@ -198,17 +158,7 @@ variable "gcp_apis" {
 
 # --- Service Accounts and IAM ---
 
-variable "agentic_dsta_sa_account_id" {
-  description = "The account ID for agentic-dsta-sa service account to use in scheduler jobs."
-  type        = string
-  default     = null
-}
 
-variable "run_invoker_role" {
-  description = "IAM role for invoking Cloud Run services."
-  type        = string
-  default     = "roles/run.invoker"
-}
 
 # --- Artifact Registry Variables ---
 variable "artifact_repository_description" {
@@ -227,7 +177,7 @@ variable "artifact_repository_format" {
 variable "apihub_specs_dir" {
   description = "Path to the directory containing OpenAPI specs for API Hub"
   type        = string
-  default     = "specs"
+  default     = "../config/specs"
 }
 
 # --- Cloud Run Variables ---
@@ -247,65 +197,9 @@ variable "run_service_env_vars" {
 
 # --- Scheduler Variables ---
 
-variable "dsta_automation_scheduler_job_name" {
-  description = "Name of dsta-automation scheduler job."
-  type        = string
-  default     = null
-}
 
-variable "dsta_automation_scheduler_job_description" {
-  description = "Description of dsta-automation scheduler job."
-  type        = string
-  default     = "Daily trigger for DSTA marketing automation agent"
-}
 
-variable "dsta_automation_scheduler_job_timezone" {
-  description = "Timezone of dsta-automation scheduler job."
-  type        = string
-  default     = "UTC"
-}
 
-variable "dsta_automation_agent_name" {
-  description = "Agent name for dsta-automation scheduler job payload."
-  type        = string
-  default     = "marketing_campaign_manager"
-}
-
-variable "dsta_automation_query" {
-  description = "Query for dsta-automation scheduler job payload."
-  type        = string
-  default     = "Run daily check based on current demand signals and business rules."
-}
-
-variable "sa_session_init_scheduler_job_name" {
-  description = "Name of sa-session-init-job scheduler job."
-  type        = string
-  default     = null
-}
-
-variable "sa_session_init_scheduler_job_description" {
-  description = "Description of sa-session-init-job scheduler job."
-  type        = string
-  default     = "Run analysis task for decision_agent using agentic-dsta-sa for initialization"
-}
-
-variable "sa_session_init_scheduler_job_schedule" {
-  description = "Schedule for sa-session-init-job scheduler job."
-  type        = string
-  default     = "*/3 * * * *"
-}
-
-variable "sa_session_init_scheduler_job_timezone" {
-  description = "Timezone of sa-session-init-job scheduler job."
-  type        = string
-  default     = "UTC"
-}
-
-variable "sa_session_init_scheduler_job_attempt_deadline" {
-  description = "Attempt deadline of sa-session-init-job scheduler job."
-  type        = string
-  default     = "180s"
-}
 
 variable "sa_run_sse_scheduler_job_name" {
   description = "Name of sa-run-sse-job scheduler job."
@@ -337,28 +231,12 @@ variable "sa_run_sse_scheduler_job_attempt_deadline" {
   default     = "180s"
 }
 
-variable "scheduler_app_name" {
-  description = "App name for scheduler job payload."
-  type        = string
-  default     = "decision_agent"
-}
 
-variable "scheduler_session_id" {
-  description = "Session ID for scheduler job payload."
-  type        = string
-  default     = "session_1"
-}
 
-variable "scheduler_new_message_text" {
-  description = "New message text for scheduler job payload."
+variable "customer_id" {
+  description = "The customer ID for the scheduler job payload."
   type        = string
-  default     = "Analyse and update customerid: 4086619433"
-}
-
-variable "scheduler_cron" {
-  description = "The cron schedule for the agent trigger"
-  type        = string
-  default     = "0 0 * * *"
+  default     = ""
 }
 
 # --- Secrets ---

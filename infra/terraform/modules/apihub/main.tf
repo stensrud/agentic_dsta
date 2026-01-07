@@ -45,7 +45,7 @@ resource "null_resource" "init_apihub" {
   })
 
   provisioner "local-exec" {
-    command = "/bin/sh ${path.module}/../../scripts/init_apihub.sh ${var.project_id} ${var.location} ${var.specs_dir}"
+    command = "/bin/sh ${path.module}/../../../scripts/apihub/init_apihub.sh ${var.project_id} ${var.location} ${var.specs_dir}"
     environment = {
       ACCOUNT_EMAIL = var.account_email
       ACCESS_TOKEN  = var.access_token
