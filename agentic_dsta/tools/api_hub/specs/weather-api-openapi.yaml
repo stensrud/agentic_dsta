@@ -3,7 +3,7 @@ info:
   title: Google Weather API
   version: v1
   description: |
-    Get daily weather forecasts including conditions, temperature, humidity, precipitation, 
+    Get daily weather forecasts including conditions, temperature, humidity, precipitation,
     wind, UV index, and astronomical data for up to 10 days.
   contact:
     name: Google Maps Platform
@@ -76,7 +76,7 @@ paths:
           in: query
           required: false
           description: |
-            Token for accessing the next page of results. 
+            Token for accessing the next page of results.
             Obtained from the nextPageToken field in the previous response.
           schema:
             type: string

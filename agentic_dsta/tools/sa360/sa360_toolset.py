@@ -6,7 +6,7 @@ from google.adk.tools.base_toolset import BaseToolset
 from google.adk.tools.function_tool import FunctionTool
 from googleapiclient.errors import HttpError
 
-from .sa360_utils import get_sheets_service
+from agentic_dsta.tools.sa360.sa360_utils import get_sheets_service
 
 
 def get_campaign_details(campaign_id: str, sheet_id: str, sheet_name: str) -> Dict[str, Any]:

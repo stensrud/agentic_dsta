@@ -73,53 +73,6 @@ class TestApiHubToolset(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(tools), 1)
 
-    @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test_project"})
-    @patch('agentic_dsta.tools.api_hub.apihub_toolset._list_apis_from_apihub', return_value=[{"name":"p/l/a/test_api", "displayName":"Test API"}])
-    @patch('agentic_dsta.tools.api_hub.apihub_toolset._get_access_token', return_value="test_token")
-    @patch('agentic_dsta.tools.api_hub.apihub_toolset.ADKAPIHubToolset')
-    async def test_lazy_load_api_toolset_get_tools(self, mock_adk_toolset, mock_get_token, mock_list_apis):
-        mock_toolset_instance = MagicMock()
-        mock_tool = MagicMock()
-        mock_toolset_instance.get_tools = AsyncMock(return_value=[mock_tool])
-        mock_adk_toolset.return_value = mock_toolset_instance
-
-        toolset = apihub_toolset.LazyLoadAPIToolset(cache_duration_seconds=60)
-
-        # First call, should load
-        tools = await toolset.get_tools()
-        self.assertEqual(len(tools), 1)
-        self.assertEqual(mock_list_apis.call_count, 1)
-
-        # Second call, should still be cached if time hasn't passed
-        tools = await toolset.get_tools()
-        self.assertEqual(len(tools), 1)
-        self.assertEqual(mock_list_apis.call_count, 1)
-
-        # Force cache to expire
-        toolset._cache_timestamp = 0
-        tools = await toolset.get_tools()
-        self.assertEqual(len(tools), 1)
-        self.assertEqual(mock_list_apis.call_count, 2)
-
-
-    @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test_project"})
-    @patch('agentic_dsta.tools.api_hub.apihub_toolset._list_apis_from_apihub', return_value=[
-        {"name":"p/l/a/api1", "attributes": {"tags": ["prod"]}},
-        {"name":"p/l/a/api2", "attributes": {"tags": ["dev"]}}
-    ])
-    @patch('agentic_dsta.tools.api_hub.apihub_toolset._get_access_token', return_value="test_token")
-    @patch('agentic_dsta.tools.api_hub.apihub_toolset.ADKAPIHubToolset')
-    async def test_selective_api_toolset_get_tools(self, mock_adk_toolset, mock_get_token, mock_list_apis):
-        mock_toolset_instance = MagicMock()
-        mock_tool = MagicMock()
-        mock_toolset_instance.get_tools = AsyncMock(return_value=[mock_tool])
-        mock_adk_toolset.return_value = mock_toolset_instance
-
-        toolset = apihub_toolset.SelectiveAPIToolset(required_tags=["prod"])
-        tools = await toolset.get_tools()
-
-        self.assertEqual(len(tools), 1)
-
 
 if __name__ == '__main__':
     unittest.main()

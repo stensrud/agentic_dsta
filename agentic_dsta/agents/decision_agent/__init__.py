@@ -13,6 +13,6 @@
 # limitations under the License.
 """Decision agent module."""
 
-from .agent import create_agent, run_decision_agent
+from agentic_dsta.agents.decision_agent.agent import create_agent, run_decision_agent
 
 __all__ = ["create_agent", "run_decision_agent"]

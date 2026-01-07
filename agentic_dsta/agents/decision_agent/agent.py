@@ -36,16 +36,18 @@ logger = logging.getLogger(__name__)
 
 # Default model, can be overridden
 DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
+LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION")
 
 
 def create_agent(instruction: str, model: str = DEFAULT_MODEL) -> agents.LlmAgent:
     """
     Creates a new instance of the decision agent with specific instructions.
-    
+
     Args:
         instruction: The system instruction for this agent instance.
         model: The Gemini model to use.
-        
+
     Returns:
         A configured LlmAgent instance.
     """
@@ -55,20 +57,16 @@ def create_agent(instruction: str, model: str = DEFAULT_MODEL) -> agents.LlmAgen
         DynamicMultiAPIToolset(),
         FirestoreToolset(),
     ]
-    
-    # Manually configure the client to ensure project execution
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    location = os.environ.get("GOOGLE_CLOUD_LOCATION")
-    
+
     client = Client(
         vertexai=True,
-        project=project_id,
-        location=location
+        project=PROJECT_ID,
+        location=LOCATION
     )
-    
+
     configured_model = Gemini(model=model)
     configured_model.api_client = client
-    
+
     return agents.LlmAgent(
         name="decision_agent",
         instruction=instruction,
@@ -84,12 +82,12 @@ async def run_decision_agent(customer_id: str) -> None:
     1. Fetches Customer Intent/Instructions.
     2. Fetches Google Ads Config (Campaigns).
     3. Loops through campaigns, creating an isolated agent for each.
-    
+
     Args:
         customer_id: The customer ID to process.
     """
     logger.info("Starting Decision Agent for Customer: %s", customer_id)
-    
+
     # 1. Fetch Global Instructions
     firestore_toolset = FirestoreToolset()
     try:
@@ -102,7 +100,7 @@ async def run_decision_agent(customer_id: str) -> None:
     except Exception as e:
          logger.error("Error fetching CustomerInstructions for %s: %s", customer_id, e)
          global_instruction = ""
-         
+
     if not global_instruction:
         logger.warning("No global instructions found for customer %s. Aborting.", customer_id)
         return
@@ -120,7 +118,7 @@ async def run_decision_agent(customer_id: str) -> None:
          ads_config = {}
 
     campaigns = ads_config.get("campaigns", [])
-    
+
     if not campaigns:
         logger.info("No campaigns found for customer %s.", customer_id)
         return
@@ -131,50 +129,50 @@ async def run_decision_agent(customer_id: str) -> None:
     for campaign in campaigns:
         campaign_id = campaign.get("campaignId")
         campaign_instruction = campaign.get("instruction", "No specific instruction.")
-        
+
         if not campaign_id:
             logger.warning("Skipping campaign with missing campaignId.")
             continue
-            
+
         logger.info("Processing Campaign: %s", campaign_id)
-        
+
         # Construct the context-rich prompt
         combined_instruction = f"""
         You are a Marketing Campaign Manager Agent.
-        
+
         **Customer Context:**
         Customer ID: {customer_id}
         Global Strategy: {global_instruction}
-        
+
         **Current Focus:**
         Campaign ID: {campaign_id}
         Campaign Specific Rules: {campaign_instruction}
-        
+
         **Task:**
         1. Analyze the current situation for Campaign {campaign_id}.
-        2. Check if any external factors (Weather, POLLEN, AQI etc) are relevant based on the instructions. 
+        2. Check if any external factors (Weather, POLLEN, AQI etc) are relevant based on the instructions.
            If so, use the API Hub tools to fetch that data.
         3. Check the campaign's current performance/status using Google Ads tools.
         4. Decide on an action (Pause, Enable, Change Bid, Change Location, or No Action).
         5. Execute the action if necessary.
         6. Provide a concise summary of your analysis and actions.
         """
-        
+
         try:
             # Create a fresh agent for this campaign
-            agent = create_agent(instruction=combined_instruction)           
-            
+            agent = create_agent(instruction=combined_instruction)
+
             # Wrap in App and Runner for execution
             app = apps.App(name="decision_app", root_agent=agent)
             runner = runners.InMemoryRunner(app=app)
-            
+
             session_id = str(uuid.uuid4())
             await runner.session_service.create_session(
-                session_id=session_id, 
-                user_id=customer_id, 
+                session_id=session_id,
+                user_id=customer_id,
                 app_name="decision_app"
             )
-            
+
             prompt_text = f"Proceed with the analysis and management of Campaign {campaign_id} based on your instructions."
             content = types.Content(parts=[types.Part(text=prompt_text)])
 
@@ -185,9 +183,9 @@ async def run_decision_agent(customer_id: str) -> None:
                 new_message=content
             ):
                 pass
-            
+
             logger.info("Result for Campaign %s: Execution Completed", campaign_id)
-            
+
         except Exception as e:
             logger.error("Failed to process campaign %s: %s", campaign_id, e)
             # Continue to next campaign even if this one fails

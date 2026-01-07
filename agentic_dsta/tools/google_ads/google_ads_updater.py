@@ -24,9 +24,9 @@ from google.protobuf import field_mask_pb2
 from google.ads.googleads.v22.enums.types.target_impression_share_location import (
     TargetImpressionShareLocationEnum
 )
-from .google_ads_client import get_google_ads_client
-from .google_ads_getter import get_campaign_details
-from .bidding_strategy_utils import validate_strategy_change
+from agentic_dsta.tools.google_ads.google_ads_client import get_google_ads_client
+from agentic_dsta.tools.google_ads.google_ads_getter import get_campaign_details
+from agentic_dsta.tools.google_ads.bidding_strategy_utils import validate_strategy_change
 import logging
 
 
@@ -329,7 +329,7 @@ def update_bidding_strategy(
         }
     )
     raise RuntimeError(f"Failed to update bidding strategy: {ex.failure}") from ex
-    
+
 def update_campaign_status(customer_id: str, campaign_id: str, status: str):
   """Enables or disables a Google Ads campaign.
 
@@ -786,7 +786,7 @@ def update_portfolio_bidding_strategy(
   if not _apply_bidding_strategy_details(
       bidding_strategy, strategy_type, field_mask_paths, strategy_details
   ):
-    raise ValueError(f"Failed to apply bidding strategy details for type: {strategy_type}")  
+    raise ValueError(f"Failed to apply bidding strategy details for type: {strategy_type}")
 
 
   # Remove duplicates

@@ -18,15 +18,18 @@ This approach queries API Hub for available APIs and loads them dynamically,
 eliminating the need for redeployment when new APIs are registered.
 """
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 from google.adk.tools.base_toolset import BaseToolset
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.apihub_tool.apihub_toolset import APIHubToolset as ADKAPIHubToolset
+from google.adk.tools.openapi_tool.auth.auth_helpers import (
+    token_to_scheme_credential
+)
 from google.auth import default
 from google.auth.transport.requests import Request
 import requests
-import logging
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 def _get_access_token() -> str:
     """Get OAuth2 access token for API Hub API."""
-    import os
     credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
     # Set quota project to avoid warnings
@@ -192,9 +194,6 @@ class DynamicMultiAPIToolset(BaseToolset):
                             api_id,
                             extra={'api_id': api_id, 'display_name': display_name}
                         )
-                        from google.adk.tools.openapi_tool.auth.auth_helpers import (
-                            token_to_scheme_credential
-                        )
                         auth_scheme, auth_credential = token_to_scheme_credential(
                             "apikey", "query", "key", api_key
                         )
@@ -218,7 +217,7 @@ class DynamicMultiAPIToolset(BaseToolset):
                     loaded_count += 1
                     logger.info("✓ Loaded API: %s", api_id, extra={'api_id': api_id})
                 except Exception as e:
-                    
+
                     # Skip APIs that can't be loaded (e.g., no spec)
                     logger.warning(
                         "✗ Skipping API %s: %s",
@@ -255,7 +254,6 @@ class DynamicMultiAPIToolset(BaseToolset):
                 all_tools.extend(tools)
             except Exception as e:
                 logger.error("Error loading tools from toolset: %s", str(e), exc_info=True)
-                continue
         return all_tools
 
 

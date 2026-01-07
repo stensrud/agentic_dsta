@@ -21,7 +21,7 @@ from google.adk.tools.function_tool import FunctionTool
 import google.ads.googleads.client
 from google.ads.googleads.errors import GoogleAdsException
 from google.protobuf.json_format import MessageToDict
-from .google_ads_client import get_google_ads_client
+from agentic_dsta.tools.google_ads.google_ads_client import get_google_ads_client
 import logging
 
 

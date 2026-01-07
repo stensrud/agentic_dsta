@@ -13,12 +13,18 @@
 # limitations under the License.
 """Main application file for the FastAPI server."""
 
+import logging
 import os
+
 from dotenv import load_dotenv
 import fastapi
+from fastapi import HTTPException, Request
 from google.adk.cli import fast_api
+from starlette.concurrency import run_in_threadpool
 import uvicorn
-from .core.logging_config import setup_logging
+
+from agentic_dsta.agents.decision_agent.agent import run_decision_agent
+from agentic_dsta.core.logging_config import setup_logging
 
 
 # Load environment variables from .env file for local development
@@ -26,6 +32,8 @@ load_dotenv()
 
 # Setup centralized logging
 setup_logging()
+
+logger = logging.getLogger(__name__)
 
 
 FastAPI = fastapi.FastAPI
@@ -58,12 +66,6 @@ app: FastAPI = get_fast_api_app(
 #     return {"Hello": "World"}
 
 
-import logging
-
-from fastapi import Request
-
-logger = logging.getLogger(__name__)
-
 @app.post("/scheduler/init_and_run")
 async def scheduler_init_and_run(request: Request):
     """
@@ -71,34 +73,34 @@ async def scheduler_init_and_run(request: Request):
     This avoids having two separate scheduler jobs.
     """
     payload = await request.json()
-    
+
     # Extract necessary fields for logging/validation
     app_name = payload.get("app_name")
     if app_name != "decision_agent":
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="This endpoint is restricted to decision_agent only.")
-        
-    # We parse the customer_id either from payload or assume user_id acts as customer_id
-    # Based on previous context, customer_id is key. user_id in payload often maps to it in ADK patterns.
-    # Let's check payload for 'customer_id', fallback to 'user_id'
+        raise HTTPException(
+            status_code=400,
+            detail="This endpoint is restricted to decision_agent only."
+        )
+
+    # Parse the customer_id from payload
     customer_id = payload.get("customer_id") or payload.get("user_id")
-    
+
     if not customer_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Missing customer_id (or user_id) in payload.")
+        raise HTTPException(
+            status_code=400,
+            detail="Missing customer_id (or user_id) in payload."
+        )
 
-    logger.info("Scheduler: Triggering decision_agent for customer_id=%s", customer_id)
+    logger.info(
+        "Scheduler: Triggering decision_agent for customer_id=%s", customer_id
+    )
 
-    from agentic_dsta.agents.decision_agent.agent import run_decision_agent
-    from starlette.concurrency import run_in_threadpool
-    
     try:
         # Run asynchronous controller
         await run_decision_agent(customer_id)
         return {"status": "success", "message": f"Decision agent run completed for {customer_id}"}
     except Exception as e:
         logger.error("Error running decision agent: %s", e)
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 def main():

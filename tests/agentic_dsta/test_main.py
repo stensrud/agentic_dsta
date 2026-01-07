@@ -1,6 +1,12 @@
 import unittest
 from unittest import mock
 import os
+import sys
+
+# Ensure agentic_dsta is importable
+sys.path.append(os.getcwd())
+
+import agentic_dsta.main
 
 # Mock uvicorn and get_fast_api_app at the class level to affect imports
 @mock.patch('agentic_dsta.main.uvicorn')
@@ -9,8 +15,6 @@ class TestMain(unittest.TestCase):
 
     @mock.patch.dict(os.environ, {'PORT': '8000'})
     def test_main(self, mock_get_fast_api_app, mock_uvicorn):
-        import agentic_dsta.main
-
         mock_app = mock.MagicMock()
         with mock.patch.object(agentic_dsta.main, 'app', mock_app):
             agentic_dsta.main.main()
@@ -19,8 +23,6 @@ class TestMain(unittest.TestCase):
 
     @mock.patch.dict(os.environ, {}, clear=True)
     def test_main_default_port(self, mock_get_fast_api_app, mock_uvicorn):
-        import agentic_dsta.main
-
         mock_app = mock.MagicMock()
         with mock.patch.object(agentic_dsta.main, 'app', mock_app):
             agentic_dsta.main.main()
