@@ -32,7 +32,7 @@ FastAPI = fastapi.FastAPI
 get_fast_api_app = fast_api.get_fast_api_app
 
 # Get the directory where main.py is located
-AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+AGENTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents")
 # Use an in-memory SQLite database for sessions to avoid file locking issues in
 # a scaled environment.
 SESSION_SERVICE_URI = "sqlite:///:memory:"
@@ -45,7 +45,7 @@ SERVE_WEB_INTERFACE = True
 # Call the function to get the FastAPI app instance
 # Ensure the agent directory name ('decision_agent') matches your agent folder
 app: FastAPI = get_fast_api_app(
-    agents_dir=AGENT_DIR,
+    agents_dir=AGENTS_DIR,
     session_service_uri=SESSION_SERVICE_URI,
     allow_origins=ALLOWED_ORIGINS,
     web=SERVE_WEB_INTERFACE,
@@ -57,6 +57,49 @@ app: FastAPI = get_fast_api_app(
 # async def read_root():
 #     return {"Hello": "World"}
 
+
+import logging
+
+from fastapi import Request
+
+logger = logging.getLogger(__name__)
+
+@app.post("/scheduler/init_and_run")
+async def scheduler_init_and_run(request: Request):
+    """
+    Combined endpoint for scheduler to initialize session and run the agent.
+    This avoids having two separate scheduler jobs.
+    """
+    payload = await request.json()
+    
+    # Extract necessary fields for logging/validation
+    app_name = payload.get("app_name")
+    if app_name != "decision_agent":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="This endpoint is restricted to decision_agent only.")
+        
+    # We parse the customer_id either from payload or assume user_id acts as customer_id
+    # Based on previous context, customer_id is key. user_id in payload often maps to it in ADK patterns.
+    # Let's check payload for 'customer_id', fallback to 'user_id'
+    customer_id = payload.get("customer_id") or payload.get("user_id")
+    
+    if not customer_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Missing customer_id (or user_id) in payload.")
+
+    logger.info("Scheduler: Triggering decision_agent for customer_id=%s", customer_id)
+
+    from agentic_dsta.agents.decision_agent.agent import run_decision_agent
+    from starlette.concurrency import run_in_threadpool
+    
+    try:
+        # Run asynchronous controller
+        await run_decision_agent(customer_id)
+        return {"status": "success", "message": f"Decision agent run completed for {customer_id}"}
+    except Exception as e:
+        logger.error("Error running decision agent: %s", e)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
 
 def main():
   """Starts the FastAPI server."""

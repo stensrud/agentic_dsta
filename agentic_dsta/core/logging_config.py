@@ -1,4 +1,3 @@
-# agentic_dsta/core/logging_config.py
 import logging
 import os
 import sys
@@ -37,7 +36,6 @@ def setup_logging():
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     logger = logging.getLogger('agentic_dsta')
 
-    # Clear existing handlers to avoid duplicates
     if logger.hasHandlers():
         logger.handlers.clear()
 
@@ -51,10 +49,3 @@ def setup_logging():
 
     print(f"Logging setup complete for 'agentic_dsta' with level {log_level}", file=sys.stderr)
 
-# Example usage in other modules:
-# import logging
-# from agentic_dsta.core.logging_config import setup_logging
-#
-# setup_logging()
-# logger = logging.getLogger(__name__)
-# logger.info("Something happened", extra={'customer_id': '123'})
