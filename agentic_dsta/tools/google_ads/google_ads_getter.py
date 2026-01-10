@@ -27,7 +27,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_campaign_details(customer_id: str, campaign_id: str) -> Dict[str, Any]:
+def get_google_ads_campaign_details(customer_id: str, campaign_id: str) -> Dict[str, Any]:
   """Fetches details for a specific Google Ads campaign.
 
   Args:
@@ -124,7 +124,7 @@ def get_campaign_details(customer_id: str, campaign_id: str) -> Dict[str, Any]:
     raise RuntimeError(f"Failed to fetch campaign details: {ex.failure}") from ex
 
 
-def search_geo_target_constants(
+def search_google_ads_geo_target_constants(
     customer_id: str, location_name: str
 ) -> Dict[str, Any]:
   """Searches for geo target constants by location name.
@@ -174,7 +174,7 @@ def search_geo_target_constants(
     raise RuntimeError(f"Failed to search for geo target constants: {ex.failure}") from ex
 
 
-def get_geo_targets(customer_id: str, campaign_id: str) -> Dict[str, Any]:
+def get_google_ads_geo_targets(customer_id: str, campaign_id: str) -> Dict[str, Any]:
   """Fetches geo targets for a campaign and its ad groups.
 
   Args:
@@ -245,7 +245,7 @@ def get_geo_targets(customer_id: str, campaign_id: str) -> Dict[str, Any]:
   }
 
 
-def list_shared_budgets(customer_id: str) -> Dict[str, Any]:
+def list_google_ads_shared_budgets(customer_id: str) -> Dict[str, Any]:
   """Fetches explicitly shared budgets for a customer.
 
   Args:
@@ -301,7 +301,7 @@ def list_shared_budgets(customer_id: str) -> Dict[str, Any]:
 
 
 
-def get_campaigns_by_bidding_strategy(
+def get_google_ads_campaigns_by_bidding_strategy(
     customer_id: str,
     bidding_strategy_resource_name: str
 ) -> Dict[str, Any]:
@@ -360,7 +360,7 @@ def get_campaigns_by_bidding_strategy(
 
 
 
-def list_portfolio_bidding_strategies(customer_id: str) -> Dict[str, Any]:
+def list_google_ads_portfolio_bidding_strategies(customer_id: str) -> Dict[str, Any]:
   """Fetches enabled portfolio bidding strategies for a customer.
 
   Args:
@@ -418,19 +418,19 @@ class GoogleAdsGetterToolset(BaseToolset):
   def __init__(self):
     super().__init__()
     self._get_campaign_details_tool = FunctionTool(
-        func=get_campaign_details,
+        func=get_google_ads_campaign_details,
     )
     self._search_geo_target_constants_tool = FunctionTool(
-        func=search_geo_target_constants,
+        func=search_google_ads_geo_target_constants,
     )
-    self._get_geo_targets_tool = FunctionTool(func=get_geo_targets)
+    self._get_geo_targets_tool = FunctionTool(func=get_google_ads_geo_targets)
     self._list_portfolio_bidding_strategies_tool = FunctionTool(
-        func=list_portfolio_bidding_strategies,
+        func=list_google_ads_portfolio_bidding_strategies,
     )
     self._get_campaigns_by_bidding_strategy_tool = FunctionTool(
-        func=get_campaigns_by_bidding_strategy,
+        func=get_google_ads_campaigns_by_bidding_strategy,
     )
-    self._list_shared_budgets_tool = FunctionTool(func=list_shared_budgets)
+    self._list_shared_budgets_tool = FunctionTool(func=list_google_ads_shared_budgets)
 
   async def get_tools(
       self, readonly_context: Optional[Any] = None

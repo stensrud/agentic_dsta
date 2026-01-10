@@ -12,7 +12,7 @@ from googleapiclient.errors import HttpError
 logger = logging.getLogger(__name__)
 
 
-def get_campaign_details(campaign_id: str, sheet_id: str, sheet_name: str) -> Dict[str, Any]:
+def get_sa360_campaign_details(campaign_id: str, sheet_id: str, sheet_name: str) -> Dict[str, Any]:
   """Fetches details for a specific SA360 campaign from the Google Sheet.
 
   Args:
@@ -110,7 +110,7 @@ def _update_campaign_property(
     raise RuntimeError(f"Failed to update campaign property: {err}") from err
 
 
-def update_campaign_status(
+def update_sa360_campaign_status(
     campaign_id: str, status: str, sheet_id: str, sheet_name: str
 ) -> Dict[str, Any]:
   """Updates the status of an SA360 campaign to 'ENABLED' or 'PAUSED'.
@@ -130,7 +130,7 @@ def update_campaign_status(
   )
 
 
-def update_campaign_geolocation(
+def update_sa360_campaign_geolocation(
     campaign_id: str,
     location_name: str,
     sheet_id: str,
@@ -153,7 +153,7 @@ def update_campaign_geolocation(
       A dictionary containing a success or error message.
   """
   if remove:
-    details = get_campaign_details(campaign_id, sheet_id, sheet_name)
+    details = get_sa360_campaign_details(campaign_id, sheet_id, sheet_name)
     if "error" in details:
       return details
 
@@ -219,7 +219,7 @@ def update_campaign_geolocation(
     )
 
 
-def update_campaign_budget(
+def update_sa360_campaign_budget(
     campaign_id: str, budget: float, sheet_id: str, sheet_name: str
 ) -> Dict[str, Any]:
   """Updates the budget for an SA360 campaign in the Google Sheet."""
@@ -234,14 +234,14 @@ class SA360Toolset(BaseToolset):
     # Get sheet id and name here
     # get_firestore_data()
     self._get_campaign_details_tool = FunctionTool(
-        func=get_campaign_details,
+        func=get_sa360_campaign_details,
     )
-    self._update_campaign_status_tool = FunctionTool(func=update_campaign_status)
+    self._update_campaign_status_tool = FunctionTool(func=update_sa360_campaign_status)
     self._update_campaign_geolocation_tool = FunctionTool(
-        func=update_campaign_geolocation
+        func=update_sa360_campaign_geolocation
     )
     self._update_campaign_budget_tool = FunctionTool(
-        func=update_campaign_budget
+        func=update_sa360_campaign_budget
     )
 
   async def get_tools(

@@ -49,13 +49,13 @@ class TestGoogleAdsUpdater(unittest.TestCase):
 
         mock_campaign_service.mutate_campaigns.return_value = MagicMock(results=[MagicMock(resource_name="test_resource")])
 
-        result = google_ads_updater.update_campaign_status("12345", "67890", "ENABLED")
+        result = google_ads_updater.update_google_ads_campaign_status("12345", "67890", "ENABLED")
         self.assertTrue(result['success'])
 
     @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_client')
     def test_update_campaign_status_invalid(self, mock_get_google_ads_client):
         with self.assertRaises(ValueError):
-            google_ads_updater.update_campaign_status("12345", "67890", "INVALID")
+            google_ads_updater.update_google_ads_campaign_status("12345", "67890", "INVALID")
 
     @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_client')
     def test_update_campaign_budget(self, mock_get_google_ads_client):
@@ -70,7 +70,7 @@ class TestGoogleAdsUpdater(unittest.TestCase):
         mock_ga_service.search_stream.return_value = [MagicMock(results=[mock_row])]
         mock_budget_service.mutate_campaign_budgets.return_value = MagicMock(results=[MagicMock(resource_name="test_resource")])
 
-        result = google_ads_updater.update_campaign_budget("12345", "67890", 50000)
+        result = google_ads_updater.update_google_ads_campaign_budget("12345", "67890", 50000)
         self.assertTrue(result['success'])
 
     @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_client')
@@ -83,7 +83,7 @@ class TestGoogleAdsUpdater(unittest.TestCase):
 
         mock_criterion_service.mutate_campaign_criteria.return_value = MagicMock(results=[MagicMock(resource_name="test_resource")])
 
-        result = google_ads_updater.update_campaign_geo_targets("12345", "67890", ["2840"])
+        result = google_ads_updater.update_google_ads_campaign_geo_targets("12345", "67890", ["2840"])
         self.assertTrue(result['success'])
 
     @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_client')
@@ -96,7 +96,7 @@ class TestGoogleAdsUpdater(unittest.TestCase):
 
         mock_criterion_service.mutate_ad_group_criteria.return_value = MagicMock(results=[MagicMock(resource_name="test_resource")])
 
-        result = google_ads_updater.update_ad_group_geo_targets("12345", "adgroup1", ["2840"])
+        result = google_ads_updater.update_google_ads_ad_group_geo_targets("12345", "adgroup1", ["2840"])
         self.assertTrue(result['success'])
 
     def test_google_ads_updater_toolset(self):
@@ -113,7 +113,7 @@ class TestGoogleAdsUpdater(unittest.TestCase):
 
         mock_budget_service.mutate_campaign_budgets.return_value = MagicMock(results=[MagicMock(resource_name="test_resource")])
 
-        result = google_ads_updater.update_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
+        result = google_ads_updater.update_google_ads_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
         self.assertTrue(result['success'])
         mock_budget_service.mutate_campaign_budgets.assert_called_once()
 
@@ -127,12 +127,12 @@ class TestGoogleAdsUpdater(unittest.TestCase):
         mock_budget_service.mutate_campaign_budgets.side_effect = GoogleAdsException(None, None, MagicMock(), "request_id")
 
         with self.assertRaises(RuntimeError):
-            google_ads_updater.update_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
+            google_ads_updater.update_google_ads_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
 
     @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_client', return_value=None)
     def test_update_shared_budget_client_fail(self, mock_get_google_ads_client):
         with self.assertRaises(RuntimeError):
-            google_ads_updater.update_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
+            google_ads_updater.update_google_ads_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
 
 if __name__ == '__main__':
     unittest.main()

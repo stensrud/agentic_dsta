@@ -45,7 +45,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_row.campaign._pb = MagicMock()
         mock_ga_service.search_stream.return_value = [MagicMock(results=[mock_row])]
         with patch('agentic_dsta.tools.google_ads.google_ads_getter.MessageToDict', return_value={'id': 'test_campaign_id'}) as mock_msg_to_dict:
-            result = google_ads_getter.get_campaign_details("12345", "test_campaign_id")
+            result = google_ads_getter.get_google_ads_campaign_details("12345", "test_campaign_id")
         self.assertIn('id', result)
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
     def test_get_campaign_details_not_found(self, mock_get_google_ads_client):
@@ -55,7 +55,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_get_google_ads_client.return_value = mock_client
         mock_ga_service.search_stream.return_value = [MagicMock(results=[])]
         with self.assertRaises(ValueError):
-            google_ads_getter.get_campaign_details("12345", "test_campaign_id")
+            google_ads_getter.get_google_ads_campaign_details("12345", "test_campaign_id")
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
     def test_get_campaign_details_exception(self, mock_get_google_ads_client):
         mock_client = MagicMock()
@@ -64,7 +64,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_get_google_ads_client.return_value = mock_client
         mock_ga_service.search_stream.side_effect = GoogleAdsException(None, None, MagicMock(), "request_id")
         with self.assertRaises(RuntimeError):
-            google_ads_getter.get_campaign_details("12345", "test_campaign_id")
+            google_ads_getter.get_google_ads_campaign_details("12345", "test_campaign_id")
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
     def test_search_geo_target_constants(self, mock_get_google_ads_client):
         mock_client = MagicMock()
@@ -75,7 +75,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_suggestion.geo_target_constant._pb = MagicMock()
         mock_gtc_service.suggest_geo_target_constants.return_value = MagicMock(geo_target_constant_suggestions=[mock_suggestion])
         with patch('agentic_dsta.tools.google_ads.google_ads_getter.MessageToDict', return_value={'resourceName': 'geoTargetConstants/1023191'}) as mock_msg_to_dict:
-            result = google_ads_getter.search_geo_target_constants("12345", "New York")
+            result = google_ads_getter.search_google_ads_geo_target_constants("12345", "New York")
         self.assertIn('suggestions', result)
         self.assertEqual(len(result['suggestions']), 1)
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
@@ -86,7 +86,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_get_google_ads_client.return_value = mock_client
         mock_gtc_service.suggest_geo_target_constants.side_effect = GoogleAdsException(None, None, MagicMock(), "request_id")
         with self.assertRaises(RuntimeError):
-            google_ads_getter.search_geo_target_constants("12345", "New York")
+            google_ads_getter.search_google_ads_geo_target_constants("12345", "New York")
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
     def test_get_geo_targets(self, mock_get_google_ads_client):
         mock_client = MagicMock()
@@ -103,7 +103,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
             [MagicMock(results=[mock_adgroup_row])]
         ]
         with patch('agentic_dsta.tools.google_ads.google_ads_getter.MessageToDict', side_effect=[{'location': {'geoTargetConstant': 'geoTargetConstants/2840'}}, {'location': {'geoTargetConstant': 'geoTargetConstants/1023191'}}]) as mock_msg_to_dict:
-            result = google_ads_getter.get_geo_targets("12345", "test_campaign_id")
+            result = google_ads_getter.get_google_ads_geo_targets("12345", "test_campaign_id")
         self.assertIn("campaign_targets", result)
         self.assertIn("ad_group_targets", result)
         self.assertEqual(len(result['campaign_targets']), 1)
@@ -116,7 +116,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_get_google_ads_client.return_value = mock_client
         mock_ga_service.search_stream.side_effect = [GoogleAdsException(None, None, MagicMock(), "request_id"), []]
         with self.assertRaises(RuntimeError):
-            google_ads_getter.get_geo_targets("12345", "test_campaign_id")
+            google_ads_getter.get_google_ads_geo_targets("12345", "test_campaign_id")
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
     def test_get_geo_targets_adgroup_exception(self, mock_get_google_ads_client):
         mock_client = MagicMock()
@@ -125,7 +125,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_get_google_ads_client.return_value = mock_client
         mock_ga_service.search_stream.side_effect = [[], GoogleAdsException(None, None, MagicMock(), "request_id")]
         with self.assertRaises(RuntimeError):
-            google_ads_getter.get_geo_targets("12345", "test_campaign_id")
+            google_ads_getter.get_google_ads_geo_targets("12345", "test_campaign_id")
     def test_google_ads_getter_toolset(self):
         toolset = google_ads_getter.GoogleAdsGetterToolset()
         tools = asyncio.run(toolset.get_tools())
@@ -140,7 +140,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_row.campaign_budget._pb = MagicMock()
         mock_ga_service.search_stream.return_value = [MagicMock(results=[mock_row])]
         with patch('agentic_dsta.tools.google_ads.google_ads_getter.MessageToDict', return_value={'id': 'budget1'}) as mock_msg_to_dict:
-            result = google_ads_getter.list_shared_budgets("12345")
+            result = google_ads_getter.list_google_ads_shared_budgets("12345")
         self.assertIn('shared_budgets', result)
         self.assertEqual(len(result['shared_budgets']), 1)
         self.assertEqual(result['shared_budgets'][0]['id'], 'budget1')
@@ -151,7 +151,7 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_client.get_service.return_value = mock_ga_service
         mock_get_google_ads_client.return_value = mock_client
         mock_ga_service.search_stream.return_value = [MagicMock(results=[])]
-        result = google_ads_getter.list_shared_budgets("12345")
+        result = google_ads_getter.list_google_ads_shared_budgets("12345")
         self.assertEqual(result, {'shared_budgets': []})
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
     def test_list_shared_budgets_exception(self, mock_get_google_ads_client):
@@ -161,10 +161,10 @@ class TestGoogleAdsGetter(unittest.TestCase):
         mock_get_google_ads_client.return_value = mock_client
         mock_ga_service.search_stream.side_effect = GoogleAdsException(None, None, MagicMock(), "request_id")
         with self.assertRaises(RuntimeError):
-            google_ads_getter.list_shared_budgets("12345")
+            google_ads_getter.list_google_ads_shared_budgets("12345")
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client', return_value=None)
     def test_list_shared_budgets_client_fail(self, mock_get_google_ads_client):
         with self.assertRaises(RuntimeError):
-            google_ads_getter.list_shared_budgets("12345")
+            google_ads_getter.list_google_ads_shared_budgets("12345")
 if __name__ == '__main__':
     unittest.main()

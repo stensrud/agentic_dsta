@@ -54,7 +54,7 @@ def test_scheduler_init_and_run_success():
             assert response.json() == {'message': 'Decision agent run completed for 4086619433', 'status': 'success'}
 
             # Verify run_decision_agent was called with correct customer_id
-            mock_run_agent.assert_called_once_with("4086619433")
+            mock_run_agent.assert_called_once_with("4086619433", None)
 
     asyncio.run(run_test())
 

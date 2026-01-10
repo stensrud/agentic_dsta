@@ -25,7 +25,7 @@ from google.ads.googleads.v22.enums.types.target_impression_share_location impor
     TargetImpressionShareLocationEnum
 )
 from agentic_dsta.tools.google_ads.google_ads_client import get_google_ads_client
-from agentic_dsta.tools.google_ads.google_ads_getter import get_campaign_details
+from agentic_dsta.tools.google_ads.google_ads_getter import get_google_ads_campaign_details
 from agentic_dsta.tools.google_ads.bidding_strategy_utils import validate_strategy_change
 import logging
 
@@ -216,7 +216,7 @@ def _apply_bidding_strategy_details(
     return False
 
 
-def update_bidding_strategy(
+def update_google_ads_bidding_strategy(
     customer_id: str,
     campaign_id: str,
     strategy_type: str,
@@ -239,7 +239,7 @@ def update_bidding_strategy(
     raise RuntimeError("Failed to get Google Ads client.")
 
   # 1. Get current campaign details
-  campaign_data = get_campaign_details(customer_id, campaign_id)
+  campaign_data = get_google_ads_campaign_details(customer_id, campaign_id)
   if campaign_data.get("error"):
     return campaign_data
 
@@ -330,7 +330,7 @@ def update_bidding_strategy(
     )
     raise RuntimeError(f"Failed to update bidding strategy: {ex.failure}") from ex
 
-def update_campaign_status(customer_id: str, campaign_id: str, status: str):
+def update_google_ads_campaign_status(customer_id: str, campaign_id: str, status: str):
   """Enables or disables a Google Ads campaign.
 
   Args:
@@ -399,7 +399,7 @@ def update_campaign_status(customer_id: str, campaign_id: str, status: str):
     raise RuntimeError(f"Failed to update campaign: {ex.failure}") from ex
 
 
-def update_campaign_budget(
+def update_google_ads_campaign_budget(
     customer_id: str, campaign_id: str, new_budget_micros: int
 ) -> Dict[str, Any]:
   """Updates the budget for a specific Google Ads campaign.
@@ -486,7 +486,7 @@ def update_campaign_budget(
     raise RuntimeError(f"Failed to update campaign budget: {ex.failure}") from ex
 
 
-def update_campaign_geo_targets(
+def update_google_ads_campaign_geo_targets(
     customer_id: str,
     campaign_id: str,
     location_ids: List[str],
@@ -586,7 +586,7 @@ def update_campaign_geo_targets(
     raise RuntimeError(f"Failed to update campaign geo targets: {ex.failure}") from ex
 
 
-def update_ad_group_geo_targets(
+def update_google_ads_ad_group_geo_targets(
     customer_id: str,
     ad_group_id: str,
     location_ids: List[str],
@@ -687,7 +687,7 @@ def update_ad_group_geo_targets(
 
 
 
-def update_shared_budget(
+def update_google_ads_shared_budget(
     customer_id: str,
     budget_resource_name: str,
     new_amount_micros: int
@@ -753,7 +753,7 @@ def update_shared_budget(
 
 
 
-def update_portfolio_bidding_strategy(
+def update_google_ads_portfolio_bidding_strategy(
     customer_id: str,
     bidding_strategy_resource_name: str,
     strategy_type: str,
@@ -825,23 +825,23 @@ class GoogleAdsUpdaterToolset(BaseToolset):
   def __init__(self):
     super().__init__()
     self._update_campaign_status_tool = FunctionTool(
-        func=update_campaign_status,
+        func=update_google_ads_campaign_status,
     )
     self._update_campaign_budget_tool = FunctionTool(
-        func=update_campaign_budget,
+        func=update_google_ads_campaign_budget,
     )
     self._update_campaign_geo_targets_tool = FunctionTool(
-        func=update_campaign_geo_targets,
+        func=update_google_ads_campaign_geo_targets,
     )
     self._update_ad_group_geo_targets_tool = FunctionTool(
-        func=update_ad_group_geo_targets
+        func=update_google_ads_ad_group_geo_targets
     )
     self._update_bidding_strategy_tool = FunctionTool(
-        func=update_bidding_strategy,
+        func=update_google_ads_bidding_strategy,
     )
-    self._update_shared_budget_tool = FunctionTool(func=update_shared_budget)
+    self._update_shared_budget_tool = FunctionTool(func=update_google_ads_shared_budget)
     self._update_portfolio_bidding_strategy_tool = FunctionTool(
-        func=update_portfolio_bidding_strategy
+        func=update_google_ads_portfolio_bidding_strategy
     )
 
   async def get_tools(

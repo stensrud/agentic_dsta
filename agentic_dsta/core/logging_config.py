@@ -7,7 +7,7 @@ import datetime
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
-            "timestamp": datetime.datetime.utcnow().isoformat() + 'Z',
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
             "severity": record.levelname,
             "message": record.getMessage(),
             "logger_name": record.name,

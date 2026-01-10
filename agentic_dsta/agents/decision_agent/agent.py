@@ -107,30 +107,18 @@ async def run_decision_agent(customer_id: str, usecase: Optional[str] = "GoogleA
         return
 
     # 2. Fetch Campaign Config
-    if usecase == "GoogleAds":
-        try:
-            doc = firestore_toolset.get_document(collection="GoogleAdsConfig", document_id=customer_id)
-            if not doc:
-                logger.warning("No GoogleAdsConfig found for customer_id: %s", customer_id)
-                ads_config = {}
-            else:
-                ads_config = doc.get("data", {})
-        except Exception as e:
-            logger.error("Error fetching GoogleAdsConfig for %s: %s", customer_id, e)
+    try:
+        collection = usecase + "Config"
+        doc = firestore_toolset.get_document(collection=collection, document_id=customer_id)
+        if not doc:
+            logger.warning("No %s found for customer_id: %s", collection, customer_id)
             ads_config = {}
-        campaigns = ads_config.get("campaigns", [])
-    else:
-        try:
-            doc = firestore_toolset.get_document(collection="SA360Config", document_id=customer_id)
-            if not doc:
-                logger.warning("No SA360Config found for customer_id: %s", customer_id)
-                sa360_config = {}
-            else:
-                sa360_config = doc.get("data", {})
-        except Exception as e:
-            logger.error("Error fetching SA360Config for %s: %s", customer_id, e)
-            sa360_config = {}
-        campaigns = sa360_config.get("campaigns", [])
+        else:
+            ads_config = doc.get("data", {})
+    except Exception as e:
+        logger.error("Error fetching %s for %s: %s", collection, customer_id, e)
+        ads_config = {}
+    campaigns = ads_config.get("campaigns", [])
     
 
     if not campaigns:
