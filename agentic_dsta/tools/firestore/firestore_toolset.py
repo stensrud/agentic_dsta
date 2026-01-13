@@ -81,14 +81,21 @@ class FirestoreToolset(BaseToolset):
         document_id: str
     ) -> Dict[str, Any]:
         """
-        Get a single document from Firestore.
+        Retrieves a single document from a Firestore collection.
+
+        Use this tool to read the complete data of a specific document if you know
+        its collection path and document ID.
 
         Args:
-            collection: Collection path (e.g., "users" or "users/user1/posts")
-            document_id: Document ID
+            collection: The path to the collection (e.g., "users", "groups/admin/settings").
+            document_id: The unique ID of the document to retrieve.
 
         Returns:
-            Document data as dictionary
+            A dictionary containing:
+            - id: The document ID.
+            - data: The document's fields and values (if found).
+            - exists: Boolean indicating whether the document exists.
+            - message/error: Information if not found or if an error occurred.
         """
         client = self._get_client()
         logger.info("Getting document: %s/%s", collection, document_id)
@@ -129,23 +136,29 @@ class FirestoreToolset(BaseToolset):
         limit: int = 100
     ) -> Dict[str, Any]:
         """
-        Query documents from a Firestore collection.
+        Search for documents in a collection with optional filtering.
+
+        Use this tool to find documents that match specific criteria. You can filter
+        by a single field comparison.
 
         Args:
-            collection: Collection path
-            field: Field name to filter on (optional)
-            operator: Comparison operator: "==", "!=", "<", "<=", ">", ">=",
-                "in", "not-in", "array-contains" (optional)
-            value: Value to compare against (optional)
-            limit: Maximum number of documents to return (default: 100)
+            collection: The path to the collection (e.g., "users").
+            field: The field name to filter on (optional).
+            operator: The comparison operator (optional). Supported: "==", "!=", "<", "<=", ">", ">=",
+                      "in", "not-in", "array-contains".
+            value: The value to compare against (optional).
+            limit: Maximum number of documents to return (default: 100).
 
         Returns:
-            List of documents matching the query
+            A dictionary containing:
+            - collection: The collection name.
+            - count: The number of documents found.
+            - documents: A list of found documents, each with 'id' and 'data'.
 
         Examples:
-            query_collection("users")  # Get all users
-            query_collection("users", "age", ">", 18, limit=50)  # Get users over 18
-            query_collection("products", "category", "==", "electronics")  # Get electronics
+            query_collection("users")  # Get first 100 users
+            query_collection("users", "age", ">", 18)  # Get users older than 18
+            query_collection("products", "category", "==", "electronics")
         """
         logger.info(
             "Querying collection: %s with filter: %s %s %s, limit: %s",
@@ -193,16 +206,20 @@ class FirestoreToolset(BaseToolset):
         merge: bool = False
     ) -> Dict[str, Any]:
         """
-        Create or update a document in Firestore.
+        Creates or updates a document in Firestore.
+
+        Use this tool to write data. If the document doesn't exist, it will be created.
+        If it exists, it will be overwritten unless 'merge' is set to True.
 
         Args:
-            collection: Collection path
-            document_id: Document ID
-            data: Document data as dictionary
-            merge: If True, merge with existing data; if False, overwrite (default: False)
+            collection: The path to the collection.
+            document_id: The ID of the document.
+            data: A dictionary containing the fields and values to write.
+            merge: If True, merges the new data with existing document data (patch).
+                   If False (default), completely overwrites the document.
 
         Returns:
-            Confirmation of the operation
+            A dictionary indicating success and the operation performed ('set' or 'merged').
         """
         logger.info("Setting document: %s/%s, merge: %s", collection, document_id, merge)
         client = self._get_client()
@@ -244,14 +261,16 @@ class FirestoreToolset(BaseToolset):
         document_id: str
     ) -> Dict[str, Any]:
         """
-        Delete a document from Firestore.
+        Deletes a specific document from Firestore.
+
+        Use this tool to permanently remove a document.
 
         Args:
-            collection: Collection path
-            document_id: Document ID
+            collection: The path to the collection.
+            document_id: The ID of the document to delete.
 
         Returns:
-            Confirmation of the deletion
+            A dictionary confirming the deletion and success status.
         """
         logger.info("Deleting document: %s/%s", collection, document_id)
         client = self._get_client()
@@ -282,10 +301,15 @@ class FirestoreToolset(BaseToolset):
 
     def list_collections(self) -> Dict[str, Any]:
         """
-        List all root-level collections in Firestore.
+        Lists the IDs of all root-level collections in the database.
+
+        Use this tool to discover what collections exist at the top level of the
+        database. This does not list subcollections nested within documents.
 
         Returns:
-            List of collection names
+            A dictionary containing:
+            - count: The number of collections found.
+            - collections: A list of collection ID strings.
         """
         logger.info("Listing all root-level collections")
         client = self._get_client()

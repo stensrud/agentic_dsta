@@ -36,7 +36,14 @@ logger = logging.getLogger(__name__)
 
 
 def _get_access_token() -> str:
-    """Get OAuth2 access token for API Hub API."""
+    """Get OAuth2 access token for authenticating with the API Hub API.
+
+    This function uses Application Default Credentials (ADC) to obtain a token
+    with the 'cloud-platform' scope, allowing the agent to query the API Hub.
+
+    Returns:
+        A string containing the valid OAuth2 access token.
+    """
     credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
     # Set quota project to avoid warnings
@@ -52,9 +59,18 @@ def _get_access_token() -> str:
 
 def _list_apis_from_apihub(project_id: str, location: str) -> List[Dict[str, Any]]:
     """
-    Query API Hub to get list of available APIs.
+    Query the Google Cloud API Hub to retrieve a list of registered APIs.
 
-    Returns list of APIs with their metadata.
+    This function makes a direct HTTP GET request to the API Hub 'list' endpoint
+    to discover what APIs are available for the agent to use.
+
+    Args:
+        project_id: The GCP project ID where API Hub is provisioned.
+        location: The GCP location (region) of the API Hub instance.
+
+    Returns:
+        A list of dictionaries, where each dictionary follows the API Hub 'Api' resource structure,
+        containing metadata like name, display name, and details.
     """
     access_token = _get_access_token()
     base_url = "https://apihub.googleapis.com/v1"
@@ -246,7 +262,18 @@ class DynamicMultiAPIToolset(BaseToolset):
             # Continue with empty toolsets - agent will work without API Hub APIs
 
     async def get_tools(self, readonly_context: Optional[Any] = None) -> List[FunctionTool]:
-        """Returns all tools from all discovered APIs."""
+        """Returns the aggregated list of tools from all dynamically loaded APIs.
+
+        Iterates through every API toolset that was successfully initialized during
+        startup and collects all their function tools into a single list.
+
+        Args:
+            readonly_context: Context object allowed to be used by the tools.
+
+        Returns:
+            A list of FunctionTool objects representing all available operations from
+            the discovered APIs.
+        """
         all_tools = []
         for toolset in self._api_toolsets:
             try:

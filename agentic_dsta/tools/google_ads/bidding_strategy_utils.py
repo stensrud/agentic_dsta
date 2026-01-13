@@ -31,6 +31,8 @@ ALLOWED_STRATEGIES = {
         "MAXIMIZE_CONVERSIONS",
         "MAXIMIZE_CONVERSION_VALUE",
         "TARGET_IMPRESSION_SHARE",
+        "TARGET_CPA",
+        "TARGET_ROAS"
     ],
     "DISPLAY": [
         "MANUAL_CPC",
@@ -74,6 +76,11 @@ def validate_strategy_change(channel_type: str, target_strategy: str) -> bool:
     """Validates if the target strategy is allowed for the given channel type."""
     channel_type = channel_type.upper()
     target_strategy = target_strategy.upper()
+
+    # Allow portfolio bidding strategies (resource names)
+    if target_strategy.startswith("CUSTOMERS/"):
+        return True
+
     if channel_type not in ALLOWED_STRATEGIES:
         logger.warning(
             "Unknown channel type '%s'",

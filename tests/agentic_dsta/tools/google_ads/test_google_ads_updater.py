@@ -124,15 +124,50 @@ class TestGoogleAdsUpdater(unittest.TestCase):
         mock_client.get_service.return_value = mock_budget_service
         mock_get_google_ads_client.return_value = mock_client
 
-        mock_budget_service.mutate_campaign_budgets.side_effect = GoogleAdsException(None, None, MagicMock(), "request_id")
+        # Mock API exception
+        error = MagicMock()
+        error.error_code = "TEST_ERROR"
+        error.message = "Test error message"
+        failure = MagicMock()
+        failure.errors = [error]
+        mock_budget_service.mutate_campaign_budgets.side_effect = GoogleAdsException(None, None, failure, "request_id")
 
-        with self.assertRaises(RuntimeError):
-            google_ads_updater.update_google_ads_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
+        result = google_ads_updater.update_google_ads_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
+        self.assertFalse(result['success'])
+        self.assertIn("Failed to update shared budget", result['error'])
 
     @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_client', return_value=None)
     def test_update_shared_budget_client_fail(self, mock_get_google_ads_client):
         with self.assertRaises(RuntimeError):
             google_ads_updater.update_google_ads_shared_budget("12345", "customers/12345/campaignBudgets/123", 600000)
+
+    @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_campaign_details')
+    @patch('agentic_dsta.tools.google_ads.google_ads_updater.get_google_ads_client')
+    def test_update_bidding_strategy_api_error(self, mock_get_client, mock_get_campaign):
+        mock_client = MagicMock()
+        mock_campaign_service = MagicMock()
+        mock_client.get_service.return_value = mock_campaign_service
+        mock_get_client.return_value = mock_client
+
+        # Mock successful campaign details fetch
+        mock_get_campaign.return_value = {"id": "123", "advertisingChannelType": "SEARCH"}
+
+        # Mock API exception during mutate
+        error = MagicMock()
+        # Mocking error_code to return a string representation akin to what we see in logs
+        error.error_code = "bidding_error: BIDDING_STRATEGY_AND_BUDGET_MUST_BE_ALIGNED"
+        error.message = "Budget and strategy not aligned"
+        failure = MagicMock()
+        failure.errors = [error]
+        mock_campaign_service.mutate_campaigns.side_effect = GoogleAdsException(None, None, failure, "request_id")
+
+        result = google_ads_updater.update_google_ads_bidding_strategy(
+            "12345", "67890", "MAXIMIZE_CONVERSIONS", {"target_cpa_micros": 1000000}
+        )
+
+        self.assertFalse(result['success'])
+        self.assertIn("Failed to update bidding strategy", result['error'])
+        self.assertIn("BIDDING_STRATEGY_AND_BUDGET_MUST_BE_ALIGNED", result['error'])
 
 if __name__ == '__main__':
     unittest.main()

@@ -28,14 +28,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 def get_google_ads_campaign_details(customer_id: str, campaign_id: str) -> Dict[str, Any]:
-  """Fetches details for a specific Google Ads campaign.
+  """Fetches details for a specific Google Ads campaign, including budget, status, and targeting settings.
+
+  Use this tool to get comprehensive information about a campaign, such as its name,
+  status, budget amount (amount_micros), bidding strategy, start/end dates,
+  and other settings.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
       campaign_id: The ID of the campaign to fetch.
 
   Returns:
-      A dictionary containing the campaign details.
+      A dictionary containing the campaign details, including 'campaign_budget' fields.
   """
 
   client = get_google_ads_client(customer_id)
@@ -52,6 +56,7 @@ def get_google_ads_campaign_details(customer_id: str, campaign_id: str) -> Dict[
           campaign_budget.status,
           campaign_budget.delivery_method,
           campaign_budget.type,
+          campaign_budget.explicitly_shared,
           campaign.app_campaign_setting.bidding_strategy_goal_type,
           campaign.advertising_channel_type,
           campaign.asset_automation_settings,
@@ -127,7 +132,11 @@ def get_google_ads_campaign_details(customer_id: str, campaign_id: str) -> Dict[
 def search_google_ads_geo_target_constants(
     customer_id: str, location_name: str
 ) -> Dict[str, Any]:
-  """Searches for geo target constants by location name.
+  """Searches for geo target constants by location name to use in targeting.
+
+  Use this tool to find the resource ID (geo_target_constant) for a specific location
+  name (e.g., 'New York', 'London'). The result includes the resource name,
+  canonical name, and target type.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
@@ -175,7 +184,11 @@ def search_google_ads_geo_target_constants(
 
 
 def get_google_ads_geo_targets(customer_id: str, campaign_id: str) -> Dict[str, Any]:
-  """Fetches geo targets for a campaign and its ad groups.
+  """Fetches existing geo targets for a campaign and its ad groups.
+
+  Use this tool to see which locations are currently targeted or excluded
+  at both the campaign and ad group levels. Returns resource names and
+  geo target constants.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
@@ -245,21 +258,35 @@ def get_google_ads_geo_targets(customer_id: str, campaign_id: str) -> Dict[str, 
   }
 
 
-def list_google_ads_shared_budgets(customer_id: str) -> Dict[str, Any]:
-  """Fetches explicitly shared budgets for a customer.
+def list_google_ads_shared_budgets(
+    customer_id: str, budget_resource_name: Optional[str] = None
+) -> Dict[str, Any]:
+  """Fetches explicitly shared budgets or a specific budget by resource name.
+
+  Use this tool to list all shared budgets, OR to get details of a specific budget
+  if you have its resource name (even if it's not explicitly shared).
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
+      budget_resource_name: Optional. The resource name of a specific budget to fetch
+                            (e.g., 'customers/123/campaignBudgets/456').
 
   Returns:
-      A dictionary containing a list of shared budgets or an error.
+      A dictionary containing a list of budgets or an error.
   """
   client = get_google_ads_client(customer_id)
   if not client:
     raise RuntimeError("Failed to get Google Ads client.")
 
   ga_service = client.get_service("GoogleAdsService")
-  query = """
+  
+  where_clause = "campaign_budget.status = 'ENABLED'"
+  if budget_resource_name:
+      where_clause += f" AND campaign_budget.resource_name = '{budget_resource_name}'"
+  else:
+      where_clause += " AND campaign_budget.explicitly_shared = TRUE"
+
+  query = f"""
         SELECT
           campaign_budget.id,
           campaign_budget.name,
@@ -269,8 +296,7 @@ def list_google_ads_shared_budgets(customer_id: str) -> Dict[str, Any]:
           campaign_budget.delivery_method,
           campaign_budget.type
         FROM campaign_budget
-        WHERE campaign_budget.explicitly_shared = TRUE
-          AND campaign_budget.status = 'ENABLED'
+        WHERE {where_clause}
     """
 
   budgets = []
@@ -282,9 +308,9 @@ def list_google_ads_shared_budgets(customer_id: str) -> Dict[str, Any]:
     return {"shared_budgets": budgets}
   except GoogleAdsException as ex:
     logger.error(
-        "Failed to fetch shared budgets",
+        "Failed to fetch budgets",
         exc_info=True,
-        extra={'customer_id': customer_id}
+        extra={'customer_id': customer_id, 'budget_resource_name': budget_resource_name}
     )
     for error in ex.failure.errors:
       logger.error(
@@ -297,7 +323,7 @@ def list_google_ads_shared_budgets(customer_id: str) -> Dict[str, Any]:
               'error_message': error.message
           }
       )
-    raise RuntimeError(f"Failed to fetch shared budgets: {ex.failure}") from ex
+    raise RuntimeError(f"Failed to fetch budgets: {ex.failure}") from ex
 
 
 
@@ -305,7 +331,10 @@ def get_google_ads_campaigns_by_bidding_strategy(
     customer_id: str,
     bidding_strategy_resource_name: str
 ) -> Dict[str, Any]:
-  """Fetches campaigns attached to a specific portfolio bidding strategy.
+  """Fetches all campaigns currently using a specific portfolio bidding strategy.
+
+  Use this tool to find out which campaigns are linked to a given portfolio
+  bidding strategy resource name.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
@@ -361,7 +390,10 @@ def get_google_ads_campaigns_by_bidding_strategy(
 
 
 def list_google_ads_portfolio_bidding_strategies(customer_id: str) -> Dict[str, Any]:
-  """Fetches enabled portfolio bidding strategies for a customer.
+  """Fetches all enabled portfolio bidding strategies for the customer.
+
+  Use this tool to discover available portfolio bidding strategies.
+  Returns details like strategy ID, name, resource name, and type.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).

@@ -224,15 +224,20 @@ def update_google_ads_bidding_strategy(
 ) -> Dict[str, Any]:
   """Updates the bidding strategy for a specific Google Ads campaign.
 
+  Use this tool to change the bidding strategy of a campaign (e.g., to 'MAXIMIZE_CONVERSIONS',
+  'TARGET_ROAS'). Can also be used to attach a portfolio bidding strategy by passing
+  its resource name as 'strategy_type'.
+
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
       campaign_id: The ID of the campaign to update.
-      strategy_type: The target bidding strategy type (e.g., 'MAXIMIZE_CONVERSIONS').
+      strategy_type: The target bidding strategy type (e.g., 'MAXIMIZE_CONVERSIONS')
+                     or a portfolio bidding strategy resource name.
       strategy_details: Optional dictionary containing specific details for the strategy
                         (e.g., {'target_cpa_micros': 1000000}).
 
   Returns:
-      A dictionary containing the result of the operation.
+      A dictionary containing the result of the operation, including the resource name.
   """
   client = get_google_ads_client(customer_id)
   if not client:
@@ -317,10 +322,15 @@ def update_google_ads_bidding_strategy(
     campaign_response = response.results[0]
     return {"success": True, "resource_name": campaign_response.resource_name}
   except GoogleAdsException as ex:
-    error_details = [str(error) for error in ex.failure.errors]
+
+    error_details = []
+    for error in ex.failure.errors:
+        error_details.append(f"{error.message} (Code: {error.error_code})")
+    
+    error_msg = "; ".join(error_details)
     logger.error(
         "Failed to update bidding strategy: %s",
-        error_details,
+        error_msg,
         exc_info=True,
         extra={
             'customer_id': customer_id,
@@ -328,10 +338,17 @@ def update_google_ads_bidding_strategy(
             'strategy_type': strategy_type
         }
     )
-    raise RuntimeError(f"Failed to update bidding strategy: {ex.failure}") from ex
+    return {
+        "success": False, 
+        "error": f"Failed to update bidding strategy: {error_msg}",
+        "error_details": error_details
+    }
 
 def update_google_ads_campaign_status(customer_id: str, campaign_id: str, status: str):
-  """Enables or disables a Google Ads campaign.
+  """Enables or pauses a Google Ads campaign.
+
+  Use this tool to change the serving status of a campaign.
+  Status can be 'ENABLED' or 'PAUSED'.
 
   Args:
     customer_id: The Google Ads customer ID (without hyphens).
@@ -339,7 +356,7 @@ def update_google_ads_campaign_status(customer_id: str, campaign_id: str, status
     status: The desired status ("ENABLED" or "PAUSED").
 
   Returns:
-    A dictionary with the result of the operation.
+    A dictionary with the result of the operation, including the resource name.
   """
   client = get_google_ads_client(customer_id)
   if not client:
@@ -379,38 +396,39 @@ def update_google_ads_campaign_status(customer_id: str, campaign_id: str, status
     )
     return {"success": True, "resource_name": campaign_response.resource_name}
   except GoogleAdsException as ex:
+    error_details = []
+    for error in ex.failure.errors:
+        error_details.append(f"{error.message} (Code: {error.error_code})")
+    
+    error_msg = "; ".join(error_details)
     logger.error(
-        "Failed to update campaign status",
+        "Failed to update campaign status: %s",
+        error_msg,
         exc_info=True,
         extra={'customer_id': customer_id, 'campaign_id': campaign_id, 'status': status}
     )
-    for error in ex.failure.errors:
-      logger.error(
-          "Google Ads API Error: %s - %s",
-          error.error_code,
-          error.message,
-          extra={
-              'customer_id': customer_id,
-              'campaign_id': campaign_id,
-              'error_code': error.error_code.name,
-              'error_message': error.message
-          }
-      )
-    raise RuntimeError(f"Failed to update campaign: {ex.failure}") from ex
+    return {
+        "success": False,
+        "error": f"Failed to update campaign status: {error_msg}",
+        "error_details": error_details
+    }
 
 
 def update_google_ads_campaign_budget(
     customer_id: str, campaign_id: str, new_budget_micros: int
 ) -> Dict[str, Any]:
-  """Updates the budget for a specific Google Ads campaign.
+  """Updates the budget amount for a specific Google Ads campaign.
+
+  Use this tool to change the daily budget of a campaign.
+  Note: Logic handles finding the associated budget resource.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
       campaign_id: The ID of the campaign to update the budget for.
-      new_budget_micros: The new budget amount in micros.
+      new_budget_micros: The new budget amount in micros (e.g., 1000000 for 1 unit).
 
   Returns:
-      A dictionary containing the result of the operation.
+      A dictionary containing the result of the operation, including the resource name.
   """
   client = get_google_ads_client(customer_id)
   if not client:
@@ -466,24 +484,22 @@ def update_google_ads_campaign_budget(
     )
     return {"success": True, "resource_name": budget_response.resource_name}
   except GoogleAdsException as ex:
+    error_details = []
+    for error in ex.failure.errors:
+        error_details.append(f"{error.message} (Code: {error.error_code})")
+    
+    error_msg = "; ".join(error_details)
     logger.error(
-        "Failed to update campaign budget",
+        "Failed to update campaign budget: %s",
+        error_msg,
         exc_info=True,
         extra={'customer_id': customer_id, 'campaign_id': campaign_id}
     )
-    for error in ex.failure.errors:
-      logger.error(
-          "Google Ads API Error: %s - %s",
-          error.error_code,
-          error.message,
-          extra={
-              'customer_id': customer_id,
-              'campaign_id': campaign_id,
-              'error_code': str(error.error_code),
-              'error_message': error.message
-          }
-      )
-    raise RuntimeError(f"Failed to update campaign budget: {ex.failure}") from ex
+    return {
+        "success": False,
+        "error": f"Failed to update campaign budget: {error_msg}",
+        "error_details": error_details
+    }
 
 
 def update_google_ads_campaign_geo_targets(
@@ -494,16 +510,18 @@ def update_google_ads_campaign_geo_targets(
 ) -> Dict[str, Any]:
   """Updates the geo targeting for a specific Google Ads campaign.
 
-  This function replaces all existing geo targets with the new ones.
+  WARNING: This function replaces ALL existing geo targets of the specified type
+  (positive or negative) with the new list provided. To add/remove specific targets,
+  you must read existing targets first.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
       campaign_id: The ID of the campaign to update.
-      location_ids: A list of location IDs (e.g., "2840" for USA) to target.
-      negative: Whether to negatively target these locations.
+      location_ids: A list of location IDs (geo_target_constant IDs, e.g., "2840" for USA).
+      negative: If True, sets these as negative (excluded) targets. If False, sets as positive targets.
 
   Returns:
-      A dictionary containing the result of the operation.
+      A dictionary containing the result of the operation, including resource names of created criteria.
   """
   client = get_google_ads_client(customer_id)
   if not client:
@@ -566,24 +584,22 @@ def update_google_ads_campaign_geo_targets(
     resource_names = [r.resource_name for r in response.results]
     return {"success": True, "resource_names": resource_names}
   except GoogleAdsException as ex:
+    error_details = []
+    for error in ex.failure.errors:
+        error_details.append(f"{error.message} (Code: {error.error_code})")
+    
+    error_msg = "; ".join(error_details)
     logger.error(
-        "Failed to update campaign geo targets",
+        "Failed to update campaign geo targets: %s",
+        error_msg,
         exc_info=True,
         extra={'customer_id': customer_id, 'campaign_id': campaign_id}
     )
-    for error in ex.failure.errors:
-      logger.error(
-          "Google Ads API Error: %s - %s",
-          error.error_code,
-          error.message,
-          extra={
-              'customer_id': customer_id,
-              'campaign_id': campaign_id,
-              'error_code': str(error.error_code),
-              'error_message': error.message
-          }
-      )
-    raise RuntimeError(f"Failed to update campaign geo targets: {ex.failure}") from ex
+    return {
+        "success": False,
+        "error": f"Failed to update campaign geo targets: {error_msg}",
+        "error_details": error_details
+    }
 
 
 def update_google_ads_ad_group_geo_targets(
@@ -594,16 +610,17 @@ def update_google_ads_ad_group_geo_targets(
 ) -> Dict[str, Any]:
   """Updates the geo targeting for a specific Google Ads ad group.
 
-  This function replaces all existing geo targets with the new ones.
+  WARNING: This function replaces ALL existing geo targets of the specified type
+  (positive or negative) for the ad group with the new list provided.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
       ad_group_id: The ID of the ad group to update.
-      location_ids: A list of location IDs (e.g., "2840" for USA) to target.
-      negative: Whether to negatively target these locations.
+      location_ids: A list of location IDs (geo_target_constant IDs, e.g., "2840" for USA).
+      negative: If True, sets these as negative (excluded) targets. If False, sets as positive targets.
 
   Returns:
-      A dictionary containing the result of the operation.
+      A dictionary containing the result of the operation, including resource names of created criteria.
   """
   client = get_google_ads_client(customer_id)
   if not client:
@@ -666,24 +683,22 @@ def update_google_ads_ad_group_geo_targets(
     resource_names = [r.resource_name for r in response.results]
     return {"success": True, "resource_names": resource_names}
   except GoogleAdsException as ex:
+    error_details = []
+    for error in ex.failure.errors:
+        error_details.append(f"{error.message} (Code: {error.error_code})")
+    
+    error_msg = "; ".join(error_details)
     logger.error(
-        "Failed to update ad group geo targets",
+        "Failed to update ad group geo targets: %s",
+        error_msg,
         exc_info=True,
         extra={'customer_id': customer_id, 'ad_group_id': ad_group_id}
     )
-    for error in ex.failure.errors:
-      logger.error(
-          "Google Ads API Error: %s - %s",
-          error.error_code,
-          error.message,
-          extra={
-              'customer_id': customer_id,
-              'ad_group_id': ad_group_id,
-              'error_code': str(error.error_code),
-              'error_message': error.message
-          }
-      )
-    raise RuntimeError(f"Failed to update ad group geo targets: {ex.failure}") from ex
+    return {
+        "success": False,
+        "error": f"Failed to update ad group geo targets: {error_msg}",
+        "error_details": error_details
+    }
 
 
 
@@ -692,7 +707,9 @@ def update_google_ads_shared_budget(
     budget_resource_name: str,
     new_amount_micros: int
 ) -> Dict[str, Any]:
-  """Updates the amount for a shared budget.
+  """Updates the amount for an explicitly shared budget.
+
+  Use this tool to change the daily amount of a shared budget.
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
@@ -700,7 +717,7 @@ def update_google_ads_shared_budget(
       new_amount_micros: The new budget amount in micros.
 
   Returns:
-      A dictionary containing the result of the operation.
+      A dictionary containing the result of the operation, including the resource name.
   """
   client = get_google_ads_client(customer_id)
   if not client:
@@ -733,23 +750,22 @@ def update_google_ads_shared_budget(
     )
     return {"success": True, "resource_name": budget_response.resource_name}
   except GoogleAdsException as ex:
+    error_details = []
+    for error in ex.failure.errors:
+        error_details.append(f"{error.message} (Code: {error.error_code})")
+    
+    error_msg = "; ".join(error_details)
     logger.error(
-        "Failed to update shared budget",
+        "Failed to update shared budget: %s",
+        error_msg,
         exc_info=True,
         extra={'customer_id': customer_id, 'budget_resource_name': budget_resource_name}
     )
-    for error in ex.failure.errors:
-      logger.error(
-          "Google Ads API Error: %s - %s",
-          error.error_code,
-          error.message,
-          extra={
-              'customer_id': customer_id,
-              'error_code': str(error.error_code),
-              'error_message': error.message
-          }
-      )
-    raise RuntimeError(f"Failed to update shared budget: {ex.failure}") from ex
+    return {
+        "success": False,
+        "error": f"Failed to update shared budget: {error_msg}",
+        "error_details": error_details
+    }
 
 
 
@@ -759,12 +775,15 @@ def update_google_ads_portfolio_bidding_strategy(
     strategy_type: str,
     strategy_details: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-  """Updates the type and details of a portfolio bidding strategy.
+  """Updates the type and details of an existing portfolio bidding strategy.
+
+  Use this tool to modify a portfolio bidding strategy, for example changing its type
+  from TARGET_CPA to TARGET_ROAS or updating its parameters (e.g., target_roas value).
 
   Args:
       customer_id: The Google Ads customer ID (without hyphens).
       bidding_strategy_resource_name: The resource name of the portfolio bidding strategy to update.
-      strategy_type: The new bidding strategy type (e.g., 'MAXIMIZE_CONVERSIONS').
+      strategy_type: The new bidding strategy type (e.g., 'MAXIMIZE_CONVERSIONS', 'TARGET_ROAS').
       strategy_details: Optional dictionary containing specific details for the new strategy type.
 
   Returns:

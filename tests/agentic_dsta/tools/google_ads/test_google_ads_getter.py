@@ -144,6 +144,27 @@ class TestGoogleAdsGetter(unittest.TestCase):
         self.assertIn('shared_budgets', result)
         self.assertEqual(len(result['shared_budgets']), 1)
         self.assertEqual(result['shared_budgets'][0]['id'], 'budget1')
+
+    @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
+    def test_get_specific_budget_success(self, mock_get_google_ads_client):
+        mock_client = MagicMock()
+        mock_ga_service = MagicMock()
+        mock_client.get_service.return_value = mock_ga_service
+        mock_get_google_ads_client.return_value = mock_client
+        mock_row = MagicMock()
+        mock_row.campaign_budget._pb = MagicMock()
+        mock_ga_service.search_stream.return_value = [MagicMock(results=[mock_row])]
+        
+        with patch('agentic_dsta.tools.google_ads.google_ads_getter.MessageToDict', return_value={'id': 'budget1', 'resource_name': 'customers/123/campaignBudgets/456'}) as mock_msg_to_dict:
+            result = google_ads_getter.list_google_ads_shared_budgets("12345", budget_resource_name="customers/123/campaignBudgets/456")
+            
+        self.assertIn('shared_budgets', result)
+        self.assertEqual(len(result['shared_budgets']), 1)
+        self.assertEqual(result['shared_budgets'][0]['resource_name'], 'customers/123/campaignBudgets/456')
+        
+        # Verify query contains the resource name filter
+        args, kwargs = mock_ga_service.search_stream.call_args
+        self.assertIn("campaign_budget.resource_name = 'customers/123/campaignBudgets/456'", kwargs['query'])
     @patch('agentic_dsta.tools.google_ads.google_ads_getter.get_google_ads_client')
     def test_list_shared_budgets_none(self, mock_get_google_ads_client):
         mock_client = MagicMock()
