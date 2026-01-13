@@ -57,7 +57,7 @@ ADDITIONAL_SECRETS=$(python3 -c "import yaml; print(' '.join(yaml.safe_load(open
 # --- Derived Resource Names ---
 SA_NAME="${RESOURCE_PREFIX}-deployer"
 # Append the project ID to the bucket name to ensure global uniqueness.
-TF_STATE_BUCKET="agentic-dsta-tf-state-v5-${PROJECT_ID}"
+TF_STATE_BUCKET="agentic-dsta-tf-state-${PROJECT_ID}"
 IMAGE_NAME="${RESOURCE_PREFIX}-image"
 REPO_NAME="${RESOURCE_PREFIX}-repo"
 TAG="latest"
@@ -251,6 +251,7 @@ if [ -z "$ACCESS_TOKEN" ]; then
     echo "Error: Failed to retrieve access token for $SA_EMAIL."
     exit 1
 fi
+export GOOGLE_OAUTH_ACCESS_TOKEN="$ACCESS_TOKEN"
 
 terraform -chdir=terraform init -upgrade -reconfigure \
   -backend-config="bucket=$TF_STATE_BUCKET" \
@@ -260,16 +261,25 @@ terraform -chdir=terraform init -upgrade -reconfigure \
 echo "--- Importing existing resources into Terraform state ---"
 
 # Firestore Database
-terraform -chdir=terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
+terraform -chdir=terraform import \
+  -var-file="terraform.tfvars" \
+  -var="access_token=$ACCESS_TOKEN" \
+  -var='secret_values={}' \
   module.firestore.google_firestore_database.database projects/${PROJECT_ID}/databases/${FIRESTORE_DB} || echo "Firestore Database import failed or already imported."
 
 # Secret Manager Secrets
 echo "--- Importing Secrets ---"
 
 # Additional secrets from config.yaml
-for secret_name in ${ADDITIONAL_SECRETS}; do
+DEFAULT_SECRETS="GOOGLE_ADS_DEVELOPER_TOKEN GOOGLE_ADS_REFRESH_TOKEN GOOGLE_ADS_CLIENT_ID GOOGLE_ADS_CLIENT_SECRET"
+ALL_SECRETS="${DEFAULT_SECRETS} ${ADDITIONAL_SECRETS}"
+
+for secret_name in ${ALL_SECRETS}; do
   echo "Attempting to import secret: ${secret_name}"
-  terraform -chdir=terraform -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="access_token=$ACCESS_TOKEN" import \
+  terraform -chdir=terraform import \
+    -var-file="terraform.tfvars" \
+    -var="access_token=$ACCESS_TOKEN" \
+    -var='secret_values={}' \
   "module.secret_manager.google_secret_manager_secret.secrets[\"${secret_name}\"]" projects/${PROJECT_ID}/secrets/${secret_name} || echo "${secret_name} import failed or already imported."
 done
 

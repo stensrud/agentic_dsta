@@ -38,8 +38,8 @@ The core of this solution is a multi-agent framework built with the Application 
     *   **Searching for Geo-Targets:** Look up geo-target constants by location name (e.g., "New York City") to find the correct IDs for targeting.
     *   **Listing Shared Budgets:** Retrieve a list of all explicitly shared budgets in the account that are currently enabled.
     *   **Updating Shared Budgets:** Modify the amount of an existing explicitly shared budget using its resource name.
-*   **SA360 Toolset:** This toolset is designed for Search Ads 360 management. It uses a Google Sheet as an intermediary for bulk updates. Its tools can modify this sheet to change campaign statuses, which are then uploaded by the user to SA360.
-    *   **Fetching Campaign Details:** Retrieve a full overview of a campaign's settings and current status from SA360.
+*   **SA360 Toolset:** This toolset is designed for Search Ads 360 management. It uses the SA360 Reporting API for fetching real-time data and a Google Sheet as an intermediary for bulk updates.
+    *   **Fetching Campaign Details:** Retrieve a full overview of a campaign's settings and current status directly from SA360.
     *   **Updating Campaign Status:** Programmatically pause or enable campaigns in Google Sheet.
     *   **Modifying Campaign Budgets:** Adjust the budget for any campaign in Google Sheet.
     *   **Updating Geo-Targeting:** Add a geolocation to the list of locations of the campaign in Google Sheet.
@@ -115,21 +115,7 @@ The following diagram illustrates the architecture of the Agentic Dynamic Signal
 This solution relies on Google Cloud API Hub. Please perform the following one-time setup in your Google Cloud Project:
 
 1.  **Enable API Hub API:**
-    ```bash
-    gcloud services enable apihub.googleapis.com --project [YOUR_PROJECT_ID]
-    ```
-
-2.  **Register Host Project:** This links API Hub to your project. This only needs to be done once per project and region.
-    ```bash
-    gcloud api-hub host-project-registrations create [YOUR_PROJECT_ID] --location=[YOUR_REGION] --project=[YOUR_PROJECT_ID]
-    ```
-    *Replace `[YOUR_PROJECT_ID]` and `[YOUR_REGION]` accordingly.*
-
-3.  **Create API Hub Instance:** Currently, only an instance named `default` is supported by the agent.
-    ```bash
-    gcloud api-hub api-hub-instances create default --location=[YOUR_REGION] --project=[YOUR_PROJECT_ID]
-    ```
-    *This command may not yet be available in gcloud. You may need to create the instance via the Cloud Console or API. Navigate to the API Hub section in the Google Cloud Console and create an instance named `default` in your chosen region.*
+    *   Follow the instructions in the [provisioning guide](https://docs.cloud.google.com/apigee/docs/apihub/provision) to enable the API Hub API in your project.
 
 ### 5.2. Local Environment
 
@@ -141,12 +127,17 @@ This solution relies on Google Cloud API Hub. Please perform the following one-t
 
 This solution requires several credentials to access Google Cloud and Google Ads APIs. Follow these steps to generate and collect them before proceeding with the deployment.
 
-### 6.1. Google API Key (for Pollen & Weather APIs)
+### 6.1. Google Cloud API Key (for Weather/Pollen APIs)
 
-1.  Navigate to the [APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials) page in the Google Cloud Console.
-2.  Click **+ CREATE CREDENTIALS** and select **API key**.
-3.  The API key will be created. Copy it and save it for your `config.yaml` file.
-4.  **Important:** It is highly recommended to restrict the API key to only the services it will be used for (Pollen API and Weather API). Click on the newly created key, and under **API restrictions**, select **Restrict key** and add the **Pollen API** and **Weather API** to the list.
+This solution uses public Google APIs (Weather, Pollen, AirQuality) which require a standard Google API Key.
+
+1.  **Enable APIs:**
+    *   Enable the [Pollen API](https://pantheon.corp.google.com/marketplace/product/google/pollen.googleapis.com), [AirQuality API](https://pantheon.corp.google.com/marketplace/product/google/air-quality.googleapis.com), and [Weather API](https://pantheon.corp.google.com/marketplace/product/google/weather.googleapis.com) in your Google Cloud Project.
+2.  **Create API Key:**
+    *   Go to the [Credentials page](https://console.cloud.google.com/apis/credentials) in your Google Cloud Console.
+    *   Click **Create Credentials** > **API key**.
+3.  **Save Key:**
+    *   Copy the key and save it. You will need to provide this as a secret named `GOOGLE_API_KEY` during deployment.
 
 ### 6.2. Google Ads API Credentials (OAuth2 User Flow)
 
@@ -155,30 +146,25 @@ Follow the official Google Ads API documentation to obtain your developer token,
 1.  **Developer Token:**
     *   Apply for a developer token through your Google Ads manager account. Follow the instructions at [Get a Developer Token](https://developers.google.com/google-ads/api/docs/first-call/dev-token).
 
-2.  **Google API Key (for Weather/Pollen APIs):**
-    *   This solution uses public Google APIs (Weather, Pollen) which require a standard Google API Key.
-    *   Go to the [Credentials page](https://console.cloud.google.com/apis/credentials) in your Google Cloud Console.
-    *   Click **Create Credentials** > **API key**.
-    *   Copy the key and save it. You will need to provide this as a secret named `GOOGLE_API_KEY` during deployment.
-
-3.  **OAuth2 Client ID and Client Secret:**
-    *   Configure an OAuth2 consent screen and create credentials for a **Desktop app**. This will provide you with a client ID and client secret. Follow the guide at [Create a Client ID and Client Secret](https://developers.google.com/google-ads/api/docs/oauth/cloud-project#create_a_client_id_and_client_secret).
-    *   **Important:** On your OAuth consent screen configuration, you must add the Google Ads API scope: `https://www.googleapis.com/auth/adwords`.
-    *   When creating your OAuth2 Client ID, make sure to add `http://127.0.0.1:8080` to the list of **Authorized redirect URIs**. The `generate_user_credentials.py` script uses this URI to capture the authorization response. Failure to add this will result in a `redirect_uri_mismatch` error.
+2.  **OAuth2 Client ID and Client Secret:**
+    *   Configure an [OAuth2 consent screen](https://pantheon.corp.google.com/apis/credentials/consent) (If not already existing) and create credentials for a **Web app**. This will provide you with a client ID and client secret. Follow the guide at [Create a Client ID and Client Secret](https://developers.google.com/google-ads/api/docs/oauth/cloud-project#create_a_client_id_and_client_secret).
+    *   **Important:** On your OAuth consent screen [configuration](https://pantheon.corp.google.com/auth/scopes?project=gta-solutions-exp), you must add the Google Ads API scope: `https://www.googleapis.com/auth/adwords` and `https://www.googleapis.com/auth/spreadsheets`.
+    *   Create OAuth2 Client ID and Client Secret for Web Application. 
+        *   Make sure to add `http://127.0.0.1:8080` to the list of **Authorized redirect URIs**. The `generate_user_credentials.py` script uses this URI to capture the authorization response. Failure to add this will result in a `redirect_uri_mismatch` error.
 
 3.  **Generate Refresh Token:**
     *   To generate the refresh token, you will use a helper script. This script automates the OAuth2 flow to get the necessary refresh token.
     *   **Prerequisites:**
-        *   Ensure you have Python installed.
+        *   Ensure you have Python3 installed.
         *   Install the Google Ads Python library:
             ```bash
-            pip install google-ads
+            pip3 install google-ads
             ```
     *   **Download the script:** Provide a link to the script or include it in your repository. For example, if you've adapted `generate_user_credentials.py`:
         *   You can find the example script here: [`generate_user_credentials.py`](https://github.com/googleads/google-ads-python/blob/main/examples/authentication/generate_user_credentials.py)
     *   **Run the script:** Execute the script, providing your Client ID and Client Secret obtained in the previous step:
         ```bash
-        python generate_user_credentials.py --client_id=YOUR_CLIENT_ID --client_secret=YOUR_CLIENT_SECRET
+        python3 generate_user_credentials.py -c  --client_secret=YOUR_CLIENT_SECRET
         ```
     *   **Authorization:** The script will output a URL. Copy this URL and open it in your web browser.
     *   Log in with the Google account that has access to the Google Ads account you want to manage.
@@ -187,7 +173,7 @@ Follow the official Google Ads API documentation to obtain your developer token,
     *   **Result:** The script will then exchange the authorization code for a refresh token and an access token, and print the refresh token to the console. It might also save the credentials to a `google-ads.yaml` file in your home directory.
     *   **Copy the Refresh Token:** Securely copy the displayed refresh token. You will need this for your `config.yaml`.
 
-6.  **Review Collected Credentials:**
+4.  **Review Collected Credentials:**
     *   Ensure you have the following list ready:
         *   Google Ads Developer Token
         *   OAuth2 Client ID
@@ -197,16 +183,24 @@ Follow the official Google Ads API documentation to obtain your developer token,
 
 Once you have collected all these credentials, have them ready. You will be prompted to enter them securely during the first run of the deployment script. You do **not** need to put them in any file.
 
-### 6.3. Google Ads API Credentials (Service Account Flow) - TBD
+### 6.3. Granting Service Account Access (Cloud Run)
 
-_This section is a placeholder for future implementation._
+The solution runs on Google Cloud Run and uses a dedicated Service Account for its identity. To allow the agent to manage your Google Ads campaigns, you must add this Service Account to your Google Ads account.
 
-For production and automated environments, it is recommended to use a service account for authentication instead of a user-based OAuth2 flow. This section will provide instructions on how to:
+1.  **Identify the Service Account Email:**
+    After deployment (or based on your config), the Service Account email will be:
+    `[resource_prefix]-runner@[project_id].iam.gserviceaccount.com`
+    *   Default `resource_prefix` is usually `dsta`.
+    *   Example: `dsta-runner@my-project-id.iam.gserviceaccount.com`
 
-*   **TBD:** Create a service account with the necessary permissions.
-*   **TBD:** Configure domain-wide delegation for the service account.
-*   **TBD:** Generate a private key for the service account.
-*   **TBD:** Update the configuration to use the service account credentials.
+2.  **Add to Google Ads:**
+    *   Log in to your Google Ads account.
+    *   Navigate to **Admin** > **Access and security**.
+    *   Click the **+** button to add a user.
+    *   Enter the **Service Account email** address.
+    *   Select **Standard** (or Admin) access level.
+    *   Click **Send invitation**.
+    *   *Note: Service Accounts typically accept the invitation automatically or do not require acceptance steps if within the same organization context.*
 
 ## 7. Installation and Deployment
 
@@ -225,7 +219,7 @@ cd gta-solutions/infra
 
 All deployment parameters are managed in the `config.yaml` file.
 
-    Use the provided example file as a template:
+1.  Use the provided example file as a template:
     ```bash
     cp config/app/config.yaml.example config/app/config.yaml
     ```
@@ -293,7 +287,7 @@ Each document in this collection represents a Google Ads customer account. The d
 **Document Schema:**
 
 *   **`customerId`** (Number): The Google Ads customer ID.
-*   **`campaigns`** (Map): A map of campaign configurations, where each key is a `campaignId`.
+*   **`campaigns`** (Array): An array of campaign objects.
     *   **`campaignId`** (Number): The ID of the Google Ads campaign.
     *   **`instruction`** (String): The natural language instruction for the agent to follow (e.g., "If the pollen count is high, pause the campaign.").
 *   **`locations`** (Array): An array of location objects used for targeting. Each object contains details like city, state, latitude, and longitude.
@@ -307,7 +301,7 @@ Each document in this collection represents a SA360 customer account. The docume
 *   **`customerId`** (Number): The SA360 customer ID.
 *   **`SheetId`** (String): The Google Sheet ID.
 *   **`SheetName`** (String): The Google Sheet name.
-*   **`campaigns`** (Map): A map of campaign configurations, where each key is a `campaignId`.
+*   **`campaigns`** (Array): An array of campaign objects.
     *   **`campaignId`** (Number): The ID of the Google Ads campaign.
     *   **`instruction`** (String): The natural language instruction for the agent to follow (e.g., "If the pollen count is high, pause the campaign.").
 
@@ -473,7 +467,7 @@ jsonPayload.customer_id="1234567890"
 
 This deployment provides two primary ways to interact with the agentic framework:
 
-### 10.1. Interactive Web Interface
+### 12.1. Interactive Web Interface
 
 Once the deployment is complete, you can interact with all the individual agents (Google Ads, SA360, Firestore, API Hub) through a web interface provided by the Application Development Kit (ADK). This is useful for testing, debugging, and performing one-off tasks.
 
@@ -482,7 +476,7 @@ The URL for your Cloud Run service will be printed at the end of the deployment 
 > [!NOTE]
 > The Application Development Kit (ADK) is an evolving framework. The Web UI's availability, features, and appearance are subject to change and are not guaranteed to remain consistent in future versions. As noted in the [official ADK documentation](https://google.github.io/adk-docs/get-started/streaming/quickstart-streaming/#try-the-agent-with-adk-web:~:text=Caution%3A%20ADK%20Web,debugging%20purposes%20only), the ADK Web interface is intended for testing and debugging purposes only.
 
-### 10.2. Automated Execution via Cloud Scheduler
+### 12.2. Automated Execution via Cloud Scheduler
 
 The core of the solution is the automated execution of the **Decision Agent**, which acts as the primary decision-maker.
 
@@ -496,18 +490,30 @@ The Decision Agent then follows its instructions to:
 
 This automated workflow allows the solution to manage your campaigns hands-free based on the rules and data sources you have configured.
 
-## 11. Security Best Practices
+## 13. Security Best Practices
 
 *   **IAM & Least Privilege:** The Terraform scripts create dedicated service accounts with the minimum necessary permissions for each component.
 *   **Secret Management:** All sensitive information is stored in Google Cloud Secret Manager and securely injected into the Cloud Run service as environment variables.
 *   **Network Security:** By default, the Cloud Run service is deployed as private (`allow_unauthenticated: false`). Access should be managed through IAM or IAP for production environments.
 
-## 12. Troubleshooting
+### 13.1. Created Service Accounts
+
+The automated deployment script ensures the principle of least privilege by creating specific Service Accounts (SAs) for different lifecycle stages:
+
+| Service Account Name | ID Pattern | Purpose |
+| :--- | :--- | :--- |
+| **Deployer SA** | `[prefix]-deployer` | **Deployment Authority:** Created by `deploy.sh`. Used temporarily to execute Terraform, build containers, and set up infrastructure. It requires broad permissions (admin) to provision resources. |
+| **Runtime SA** | `[prefix]-runner` | **Application Identity:** Created by Terraform. Used by the Cloud Run application at runtime. It has restricted permissions, limited to accessing secrets, writing to Firestore, and invoking needed APIs. **This is the account you add to Google Ads.** |
+
+*   `[prefix]` corresponds to the `resource_prefix` value defined in your `config.yaml`.
+*   Note: The **Compute Engine default service account** is also temporarily granted `objectViewer` permission to fetch source code for Cloud Build.
+
+## 14. Troubleshooting
 
 *   **Permissions Errors:** If the deployment fails with a permissions error, ensure the user or service account running the script has the required IAM roles listed in the **Prerequisites** section.
 *   **API Not Enabled:** If you see errors related to a specific service, you may need to manually enable the corresponding API in the Google Cloud Console.
 
-## 13. Cost
+## 15. Cost
 
 This solution uses billable Google Cloud services. The primary cost drivers are:
 
@@ -517,7 +523,7 @@ This solution uses billable Google Cloud services. The primary cost drivers are:
 
 To estimate the cost, use the [Google Cloud Pricing Calculator](https://cloud.google.com/products/calculator).
 
-## 14. Destroying the Infrastructure
+## 16. Destroying the Infrastructure
 
 To tear down all the resources created by this deployment, it is recommended to use the `destroy.sh` script from the `infra` directory. This script handles the necessary authentication setup and ensures a cleaner teardown process:
 
@@ -527,3 +533,35 @@ bash destroy.sh
 ```
 
 The script will prompt for confirmation before destroying the resources. This will remove all the Google Cloud resources managed by Terraform in this solution.
+
+## 17. Solution Artifacts
+
+The following table lists the key configuration samples and API specifications included in the repository:
+
+| Category | File Path | Description |
+| :--- | :--- | :--- |
+| **Configuration** | [`infra/config/app/config.yaml`](infra/config/app/config.yaml) | Main configuration file for deployment. |
+| **Samples** | [`infra/config/samples/firestore_config.json`](infra/config/samples/firestore_config.json) | Example Firestore configuration for campaigns and rules. |
+| **API Specs** | [`infra/config/specs/`](infra/config/specs/) | OpenAPI specifications for external tools (Weather, Pollen, Air Quality). |
+
+### About Spec Files
+
+The files in the `infra/config/specs/` directory are **OpenAPI 3.0 specification files** (formerly known as Swagger). These YAML files define the interface for the external APIs that the agent can interacts with. They describe:
+
+*   **Endpoints:** The available URL paths (e.g., `/v1/forecast:lookup`).
+*   **Operations:** The HTTP methods supported (GET, POST, etc.).
+*   **Parameters:** The input data required for each operation.
+*   **Schemas:** The structure of the request and response bodies.
+
+These specifications are critical because the **API Hub Toolset** uses them to "teach" the agent how to construct valid API requests.
+
+### Enhancing Specifications
+
+You can modify these files or add new ones to expose more functionality to the agent. The provided specs are often subsets of the full API capabilities, tailored for the agent's specific needs.
+
+To enhance a specification:
+
+1.  **Consult the Official API Documentation:** Refer to the official documentation for the API (e.g., [Google Maps Platform documentation](https://developers.google.com/maps/documentation)) to identify other endpoints or parameters you want to add.
+2.  **Edit the YAML File:** Update the corresponding `.yaml` file in `infra/config/specs/` following the [OpenAPI 3.0 Specification](https://spec.openapis.org/oas/v3.0.3) standard.
+    *   *Example:* If you want the Weather API to return hourly data instead of just daily, you might add the `hourly` parameter to the `parameters` list in `weather-api-openapi.yaml`.
+3.  **Redeploy:** After modifying the spec file, you must re-register the API version in API Hub. If you are using the automated `deploy.sh` script, simply re-running it will update the API Hub registry with your changes.
