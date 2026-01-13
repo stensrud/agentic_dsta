@@ -114,7 +114,7 @@ resource "google_cloud_scheduler_job" "sa_combined_job" {
   region           = var.region
   name             = local.sa_combined_scheduler_job_name
   description      = "Combined job to init session and run agent for SA360"
-  schedule         = var.sa_run_sse_scheduler_job_schedule
+  schedule         = var.sa360_scheduler_schedule
   time_zone        = var.sa_run_sse_scheduler_job_timezone
   attempt_deadline = var.sa_run_sse_scheduler_job_attempt_deadline
 
@@ -132,7 +132,7 @@ resource "google_cloud_scheduler_job" "sa_combined_job" {
     body = base64encode(jsonencode({
       app_name = "decision_agent"
       user_id  = google_service_account.run_sa.email
-      customer_id = var.customer_id
+      customer_id = var.sa360_customer_id
       usecase = "SA360"
     }))
     headers = {
@@ -154,7 +154,7 @@ resource "google_cloud_scheduler_job" "google_ads_combined_job" {
   region           = var.region
   name             = local.google_ads_combined_scheduler_job_name
   description      = "Combined job to init session and run agent for Google Ads"
-  schedule         = var.sa_run_sse_scheduler_job_schedule
+  schedule         = var.googleads_scheduler_schedule
   time_zone        = var.sa_run_sse_scheduler_job_timezone
   attempt_deadline = var.sa_run_sse_scheduler_job_attempt_deadline
 
@@ -172,7 +172,7 @@ resource "google_cloud_scheduler_job" "google_ads_combined_job" {
     body = base64encode(jsonencode({
       app_name = "decision_agent"
       user_id  = google_service_account.run_sa.email
-      customer_id = var.customer_id
+      customer_id = var.googleads_customer_id
       usecase = "GoogleAds"
     }))
     headers = {

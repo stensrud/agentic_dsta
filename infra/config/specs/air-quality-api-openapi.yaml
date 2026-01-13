@@ -20,6 +20,9 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - location
+                - dateTime
               properties:
                 location:
                   type: object
@@ -33,10 +36,13 @@ paths:
                 dateTime:
                   type: string
                   format: date-time
-                  description: The date and time for the start of the forecast.
+                  description: |
+                    The date and time for the start of the forecast.
+                    REQUIRED. If the user did not specify a time, ASK THEM for the date and time (or assume current time if implied).
+                    Format: RFC3339, e.g. 2026-01-13T19:00:00Z.
                 period:
                   type: string
-                  description: A duration for the forecast length.
+                  description: A duration for the forecast length. e.g. "1h".
                 pageSize:
                   type: integer
                   description: The maximum number of hourly forecast records to return per page.

@@ -10,12 +10,15 @@ allow_unauthenticated: true
 firestore_database_type: "FIRESTORE_NATIVE"
 
 #Scheduler Cron
-sa_run_sse_scheduler_job_schedule: "5 10 * * *"
+googleads_scheduler_schedule: "5 10 * * *"
+sa360_scheduler_schedule: "5 10 * * *"
 
-
-additional_secrets: []
+additional_secrets: ["GOOGLE_API_KEY"]
 #  - MY_CUSTOM_API_KEY
 #  - ANOTHER_API_SECRET
 
 #Google Ads Customer ID to be triggered from cloud scheduler
-customer_id: "YOUR_CUSTOMER_ID"
+googleads_customer_id: "GOOGLE_ADS_CUSTOMER_ID"
+
+#SA360 Customer ID to be triggered from cloud scheduler
+sa360_customer_id: "SA360_CUSTOMER_ID"

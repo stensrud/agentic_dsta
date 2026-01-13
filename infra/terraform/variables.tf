@@ -213,8 +213,14 @@ variable "sa_run_sse_scheduler_job_description" {
   default     = "Run analysis task for decision_agent using agentic-dsta-sa"
 }
 
-variable "sa_run_sse_scheduler_job_schedule" {
-  description = "Schedule for sa-run-sse-job scheduler job."
+variable "googleads_scheduler_schedule" {
+  description = "Schedule for Google Ads scheduler job."
+  type        = string
+  default     = "*/8 * * * *"
+}
+
+variable "sa360_scheduler_schedule" {
+  description = "Schedule for SA360 scheduler job."
   type        = string
   default     = "*/8 * * * *"
 }
@@ -235,6 +241,18 @@ variable "sa_run_sse_scheduler_job_attempt_deadline" {
 
 variable "customer_id" {
   description = "The customer ID for the scheduler job payload."
+  type        = string
+  default     = ""
+}
+
+variable "googleads_customer_id" {
+  description = "The Google Ads customer ID for the scheduler job payload."
+  type        = string
+  default     = ""
+}
+
+variable "sa360_customer_id" {
+  description = "The SA360 customer ID for the scheduler job payload."
   type        = string
   default     = ""
 }

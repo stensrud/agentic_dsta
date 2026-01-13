@@ -82,14 +82,7 @@ paths:
             type: string
           example: "ChYKEgm8dJMYBLZCQBH-ZffkYYVewBAGEAMYAyILCKyAqr0GEKOR6lUqE0FtZXJpY2EvTG9zX0FuZ2VsZXM="
 
-        - name: key
-          in: query
-          required: true
-          description: Your API key for authentication
-          schema:
-            type: string
-          style: form
-          explode: false
+
 
       responses:
         '200':

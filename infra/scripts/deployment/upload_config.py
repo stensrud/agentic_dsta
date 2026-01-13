@@ -84,6 +84,30 @@ if __name__ == "__main__":
             logger.info(f"Detected batch configuration list in {args.config}")
             for item in config_data:
                 collection = item.get("collection_name")
+                
+                # Check for nested documents list (e.g., CustomerInstructions)
+                if "documents" in item and isinstance(item["documents"], list):
+                    nested_documents = item["documents"]
+                    logger.info(f"Processing {len(nested_documents)} nested documents for collection: {collection}")
+                    for nested_doc in nested_documents:
+                        doc_id = nested_doc.get("id") or nested_doc.get("document_id")
+                        data = nested_doc.get("data")
+                        
+                        if not collection or not doc_id or data is None:
+                             logger.warning(f"Skipping invalid nested batch item in {collection}: {nested_doc.keys()}")
+                             continue
+                        
+                        _upload_data(
+                            project_id=args.project_id,
+                            database=args.database,
+                            collection_name=collection,
+                            document_id=doc_id,
+                            data=data,
+                            access_token=token
+                        )
+                    continue
+
+                # Standard flat item processing
                 doc_id = item.get("document_id")
                 data = item.get("data")
 
@@ -91,18 +115,6 @@ if __name__ == "__main__":
                     logger.warning(f"Skipping invalid batch item: {item.keys()}")
                     continue
 
-                # Upload directly using the inner data
-                # We reuse the logic but avoiding reloading the file is cleaner,
-                # but valid upload_config takes a PATH.
-                # Refactoring upload_config to take data directly would be better,
-                # but to minimize changes let's just use the logic inline or split it.
-                # Actually, let's split upload_config into separate load and upload functions?
-                # Or just write a quick helper here.
-
-                # To keep it simple and safe, I will inline the upload logic here or call a helper.
-                # Let's verify if I can just instantiate the client once.
-
-                # REFACTOR: Let's extract the upload logic to a function that takes dict data.
                 _upload_data(
                     project_id=args.project_id,
                     database=args.database,

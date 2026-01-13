@@ -1,0 +1,78 @@
+[
+  {
+    "collection_name": "GoogleAdsConfig",
+    "document_id": "1234567890",
+    "data": {
+      "customerId": 1234567890,
+      "logincustomerid": "0987654321",
+      "instruction": "Workflow ID: standard_opt_v1 Description: Standard optimization workflow for campaigns.",
+      "campaigns": [
+        {
+          "campaignId": 1122334455,
+          "instruction": "If pollen count is High (>=1) AND weather is not 'Rain', set status to ENABLED, budget to 500, and bid to 4.00. If it is Raining OR pollen is Low (<1), set status to PAUSED."
+        },
+        {
+          "campaignId": 5566778899,
+          "instruction": "If current temperature is greater than 24°C for the configured locations, remove that location from the campaign. Use locations configured in firestore to get latitude and longitude data."
+        }
+      ],
+      "locations": [
+        {
+          "city": "London",
+          "city_ascii": "London",
+          "country_fips": "UK",
+          "country_name": "United Kingdom",
+          "lat": 51.5074,
+          "lng": -0.1278,
+          "population": 8982000,
+          "state_id": "ENG",
+          "state_name": "Greater London"
+        },
+        {
+          "city": "New York",
+          "city_ascii": "New York",
+          "country_fips": "US",
+          "country_name": "United States",
+          "lat": 40.7128,
+          "lng": -74.0060,
+          "population": 8804190,
+          "state_id": "NY",
+          "state_name": "New York"
+        }
+      ]
+    }
+  },
+  {
+    "collection_name": "SA360Config",
+    "document_id": "9876543210",
+    "data": {
+      "SheetId": "YOUR_GOOGLE_SHEET_ID",
+      "SheetName": "Sheet1",
+      "campaigns": [
+        {
+          "campaignId": 20159544373,
+          "instructions": "If pollen level for location: longitude 35.32 and latitude 32.32 is equal to 1 for next 1 day, set the budget to 3"
+        }
+      ]
+    }
+  },
+  {
+    "collection_name": "CustomerInstructions",
+    "documents": [
+      {
+        "id": "1234567890",
+        "doc_comment": "Customer Instructions for Google Ads Customer 1234567890",
+        "data": {
+          "instruction": "Workflow ID: standard_opt_v1 Description: Standard Daily Campaign Optimization Workflow\n\nSOP Steps:\n1.  **Identify Customer:** Determine the customerId for the current run (e.g., from the request or environment) and for that customer get login_customer_id from customerinstructions collection.\n2.  **Fetch Customer Configuration:** Load the document from the 'GoogleAdsConfig' collection where the document ID matches the customerId.\n3.  **Validate Configuration:** If no document is found for the customerId, inform the user that the customer configuration is missing and terminate the workflow for this customer.\n4.  **Initiate Campaign Loop:** Iterate through each item in the 'campaign' array within the loaded GoogleAdsConfig document. For each item, perform the subsequent steps (5-13).\n5.  **Fetch Google Ads Campaign Data:** Retrieve key performance metrics for the current campaignId. This includes cost, conversions, ROAS, CTR, and impressions from the last 7 days.\n6.  **Fetch External API Data:** Make calls(if required) to registered APIs in APIHub as defined in the current campaign's instructions.\n7.  **Evaluate Campaign Budgets:** Analyze and determine necessary budget adjustments for the current campaignId based on its instructions, using both Google Ads data and API Hub data.\n8.  **Evaluate Campaign Statuses:** Determine if the current campaignId should be paused or enabled based on its  instructions, using both Google Ads data and API Hub data.\n9.  **Evaluate Campaign Locations:** Analyze location targeting for the current campaignId based on its instructions, using both Google Ads data and API Hub data.\n10. **Compile Campaign Recommendations:** Consolidate all proposed changes for the current campaignId.\n11. **End Campaign Loop:** Repeat steps 5-10 for the next campaign in the 'campaign' array.\n12. **Aggregate All Recommendations:** Combine all recommendations generated for all campaigns for this customer.\n13. **Log Decision Taken:** Present the aggregated recommendations. Include the customer ID and a summary of all proposed changes.\n14. **Apply Approved Changes to Google Ads:** Execute the approved modifications in Google Ads using the appropriate updater tools.\n16. **Finalize Workflow:** Log completion for the customerId."
+        }
+      },
+      {
+        "id": "9876543210",
+        "doc_comment": "Customer Instructions for SA360 Customer 9876543210",
+        "data": {
+          "instruction": "Workflow ID: standard_opt_v1 Description: Standard Daily Campaign Optimization Workflow\n\nSOP Steps:\n1.  **Identify Customer:** Determine the customerId for the current run (e.g., from the request or environment).\n2.  **Fetch Customer Configuration:** Load the document from the `SA360Config` collection where the document ID matches the customerId.\n3.  **Validate Configuration:** If no document is found for the customerId, inform the user that the customer configuration is missing and terminate the workflow for this customer.\n4.  **Initiate Campaign Loop:** Iterate through each item in the `campaign` array within the loaded SA360Config document. For each item, perform the subsequent steps (5-14).\n5.  **Initiatie SA360 toolset:** Load `SheetId` and `SheetName` from loaded `SA360Config` collection where document ID matches the customerId.\n6.  **Fetch SA360 Campaign Data:** Pass the `SheetId` & `SheetName` to SA360 toolset and retrieve key performance metrics for the current campaignId. This includes all campaign details like: cost, locations, campaign name etc.\n7.  **Fetch External API Data:** Make calls(if required) to registered APIs in APIHub as defined in the current campaign's instructions.\n8.  **Evaluate Campaign Budgets:** Analyze and determine necessary budget adjustments for the current campaignId based on its instructions, using both SA360 sheets data and API Hub data.\n9.  **Evaluate Campaign Statuses:** Determine if the current campaignId should be paused or enabled based on its  instructions, using both SA360 sheets data and API Hub data.\n10. **Evaluate Campaign Locations:** Analyze location targeting for the current campaignId based on its instructions, using both SA360 sheets data and API Hub data.\n11. **Compile Campaign Recommendations:** Consolidate all proposed changes for the current campaignId.\n12. **End Campaign Loop:** Repeat steps 5-11 for the next campaign in the 'campaign' array.\n13. **Aggregate All Recommendations:** Combine all recommendations generated for all campaigns for this customer.\n14. **Log Decision Taken:** Present the aggregated recommendations. Include the customer ID and a summary of all proposed changes.\n15. **Apply Approved Changes to SA360 sheet:** Execute the approved modifications in SA360 sheet using the appropriate updater tools.\n16. **Finalize Workflow:** Log completion for the customerId"
+        }
+      }
+    ]
+  }
+]
