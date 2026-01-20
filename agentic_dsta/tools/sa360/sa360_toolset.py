@@ -67,6 +67,14 @@ def get_locations(campaign_id: str, customer_id: str, service):
   return geo_list
 
 
+def get_criterion_data(criteria_data):
+  criterion_data = []
+  for criterion in criteria_data:
+    criterion_data.append(criterion["campaignCriterion"]["device"]["type"])
+  return criterion_data
+
+
+
 def get_sa360_campaign_details(campaign_id: str, customer_id: str) -> Dict[str, Any]:
   """Fetches comprehensive details for a specific SA360 campaign from the Reporting API.
 
@@ -97,31 +105,26 @@ def get_sa360_campaign_details(campaign_id: str, customer_id: str) -> Dict[str, 
         campaign.status,
         campaign.labels,
         campaign.tracking_url_template,
-        campaign.url_custom_parameters,
         campaign.url_expansion_opt_out,
-        -- Valid budget fields in v0
-        campaign.campaign_budget, -- This returns the resource_name (contains the ID)
         campaign_budget.amount_micros,
         campaign_budget.delivery_method,
         campaign_budget.period,
-        -- Campaign settings
         campaign.geo_target_type_setting.negative_geo_target_type,
         campaign.geo_target_type_setting.positive_geo_target_type,
         campaign.serving_status,
         campaign.ad_serving_optimization_status,
-        campaign.advertising_channel_type,  --campaign type
+        campaign.advertising_channel_type,
         campaign.advertising_channel_sub_type,
         campaign.engine_id,
         campaign.start_date,
         campaign.end_date,
         campaign.bidding_strategy_type,
-        campaign.bidding_strategy,
         campaign.tracking_url_template,
         campaign.final_url_suffix,
-        campaign.network_settings.target_google_search,  --networks
+        campaign.network_settings.target_google_search,
         campaign.network_settings.target_search_network,
         campaign.network_settings.target_content_network,
-        campaign.network_settings.target_partner_search_network,  --networks
+        campaign.network_settings.target_partner_search_network,
         campaign.target_cpa.target_cpa_micros,
         campaign.target_roas.target_roas,
         campaign.target_impression_share.location,
@@ -134,14 +137,9 @@ def get_sa360_campaign_details(campaign_id: str, customer_id: str) -> Dict[str, 
 
   criterion_query = f"""
     SELECT
-        campaign.id,
-        campaign_criterion.criterion_id,
-        campaign_criterion.type,
-        campaign_criterion.negative,
-        campaign_criterion.device.type,
-        campaign_criterion.bid_modifier
+        campaign_criterion.device.type
         FROM campaign_criterion
-        WHERE campaign_criterion.type IN ('LANGUAGE', 'DEVICE')
+        WHERE campaign_criterion.type IN ('DEVICE')
         AND campaign.id = {campaign_id}
   """
 
@@ -158,9 +156,16 @@ def get_sa360_campaign_details(campaign_id: str, customer_id: str) -> Dict[str, 
     )
     criterion_response = request_criterion.execute()
     response["results"][0]["campaignCriterion"] = criterion_response["results"]
+    criteria_data = get_criterion_data(response["results"][0]["campaignCriterion"])
+    campaign_data = response["results"][0].get("campaign",{})
+    campaign_data.pop("resourceName", None)
+    budget_data = response["results"][0].get("campaignBudget",{})
+    budget_data.pop("resourceName", None)
 
     if "results" in response and response["results"]:
-      res = {"campaign": response["results"][0].get("campaign",{}), "campaignBudget":response["results"][0].get("campaignBudget",{}), "campaignCriterion":response["results"][0].get("campaignCriterion")}
+      res = {"campaign": campaign_data,
+             "campaignBudget":budget_data,
+             "campaignCriterion":criteria_data}
       if res["campaignBudget"].get("amountMicros") and res["campaignBudget"]["amountMicros"].isdigit():
         res["campaign"]["budget"] = float(res["campaignBudget"]["amountMicros"]) / 1000000
       else:
@@ -298,6 +303,7 @@ def update_sa360_campaign_status(
     upper_status = status.upper()
     if upper_status not in ["ENABLED", "PAUSED"]:
       return {"error": "Status must be either 'ENABLED' or 'PAUSED'."}
+    _update_campaign_property(campaign_id, "Row Type", "Campaign", sheet_id, sheet_name)
     return _update_campaign_property(
         campaign_id, "Campaign status", upper_status, sheet_id, sheet_name
     )
@@ -394,6 +400,7 @@ def update_sa360_campaign_geolocation(
         logger.error(err)
         raise RuntimeError(f"Failed to remove campaign geolocation: {err}") from err
     else:
+      _update_campaign_property(campaign_id, "Row Type", "Campaign", sheet_id, sheet_name)
       return _update_campaign_property(
           campaign_id, "Location", location_name, sheet_id, sheet_name
       )
@@ -420,10 +427,11 @@ def update_sa360_campaign_budget(
       A dictionary indicating success.
   """
   if compare_campaign_data(get_sa360_campaign_details_sheet(campaign_id, sheet_id, sheet_name), get_sa360_campaign_details(campaign_id, customer_id)):
+    _update_campaign_property(campaign_id, "Row Type", "Campaign", sheet_id, sheet_name)
     return _update_campaign_property(campaign_id, "Budget", budget, sheet_id, sheet_name)
   else:
     _update_campaign_property(campaign_id, "Row Type", "", sheet_id, sheet_name)
-    raise RuntimeError("Data mismatch between Google Sheet and SA360 API.")
+    raise RuntimeError("Data mismatch between Google Sheet and SA360 API. Kindly go to the Sheet and fix the data.")
 
 
 class SA360Toolset(BaseToolset):
