@@ -111,21 +111,19 @@ def compare_campaign_data(
     )
     if sheet_bid_strategy != api_bid_strategy:
       return False
-  if sheet_row.get("Campaign start date") and len(str(sheet_row.get("Campaign start date")).strip())>0 and sheet_row.get("Campaign start date") != sa360_campaign["campaign"].get("startDate"):
-    return False
   if sheet_row.get("Campaign end date") and len(str(sheet_row.get("Campaign end date")).strip())>0 and sheet_row.get("Campaign end date") != sa360_campaign["campaign"].get("endDate"):
     return False
 
-  if sheet_row.get("Location") and len(str(sheet_row.get("Location")).strip())>0:
-    sheet_locations_str = sheet_row.get("Location", "")
-    if not isinstance(sheet_locations_str, str):
-      sheet_locations_str = str(sheet_locations_str)
-    sheet_locations = sorted(
-        [loc.strip() for loc in sheet_locations_str.split(",") if loc.strip()]
-    )
-    api_locations = sorted(sa360_campaign["campaign"].get("location", []))
-    if sheet_locations != api_locations:
-      return False
+  # if sheet_row.get("Location") and len(str(sheet_row.get("Location")).strip())>0:
+  #   sheet_locations_str = sheet_row.get("Location", "")
+  #   if not isinstance(sheet_locations_str, str):
+  #     sheet_locations_str = str(sheet_locations_str)
+  #   sheet_locations = sorted(
+  #       [loc.strip() for loc in sheet_locations_str.split(",") if loc.strip()]
+  #   )
+  #   api_locations = sorted(sa360_campaign["campaign"].get("location", []))
+  #   if sheet_locations != api_locations:
+  #     return False
 
   return True
 
