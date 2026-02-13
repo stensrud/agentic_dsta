@@ -28,6 +28,12 @@ from agentic_dsta.tools.firestore.firestore_toolset import FirestoreToolset
 from google.adk import agents
 from agentic_dsta.tools.google_ads.google_ads_getter import GoogleAdsGetterToolset
 from agentic_dsta.tools.google_ads.google_ads_updater import GoogleAdsUpdaterToolset
+# SEARCH_ACTIVATE_MODIFICATION: Added dry-run updater import
+from agentic_dsta.tools.google_ads.dry_run_updater import DryRunGoogleAdsUpdaterToolset
+# SEARCH_ACTIVATE_MODIFICATION: Added unified action logger import
+from agentic_dsta.core.action_logger import clear_actions, get_actions
+# SEARCH_ACTIVATE_MODIFICATION: Added run logger import
+from agentic_dsta.core.run_logger import log_run_start, log_run_complete
 from agentic_dsta.tools.sa360.sa360_toolset import SA360Toolset
 
 
@@ -40,21 +46,26 @@ PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION")
 
 
-def create_agent(instruction: str, model: str = DEFAULT_MODEL) -> agents.LlmAgent:
+def create_agent(instruction: str, model: str = DEFAULT_MODEL, dry_run: bool = False) -> agents.LlmAgent:
     """
     Creates a new instance of the decision agent with specific instructions.
 
     Args:
         instruction: The system instruction for this agent instance.
         model: The Gemini model to use.
+        dry_run: If True, use dry-run updater that simulates changes.
+                 SEARCH_ACTIVATE_MODIFICATION: Added dry_run parameter.
 
     Returns:
         A configured LlmAgent instance.
     """
+    # SEARCH_ACTIVATE_MODIFICATION: Conditionally use dry-run or real updater
+    updater_toolset = DryRunGoogleAdsUpdaterToolset() if dry_run else GoogleAdsUpdaterToolset()
+    
     tools = [
         GoogleAdsGetterToolset(),
-        GoogleAdsUpdaterToolset(),
-        DynamicMultiAPIToolset(),
+        updater_toolset,
+        DynamicMultiAPIToolset(location=LOCATION),
         FirestoreToolset(),
         SA360Toolset(),
     ]
@@ -76,7 +87,12 @@ def create_agent(instruction: str, model: str = DEFAULT_MODEL) -> agents.LlmAgen
     )
 
 
-async def run_decision_agent(customer_id: str, usecase: Optional[str] = "GoogleAds") -> None:
+async def run_decision_agent(
+    customer_id: str, 
+    usecase: Optional[str] = "GoogleAds",
+    dry_run: bool = False,
+    triggered_by: str = "scheduler"
+) -> dict:
     """
     Main entry point for the Decision Agent.
     Controller Logic:
@@ -86,8 +102,29 @@ async def run_decision_agent(customer_id: str, usecase: Optional[str] = "GoogleA
 
     Args:
         customer_id: The customer ID to process.
+        usecase: The use case (GoogleAds or sa360).
+        dry_run: If True, simulate changes without applying them.
+                 SEARCH_ACTIVATE_MODIFICATION: Added dry_run parameter.
+        triggered_by: What triggered the run (scheduler, manual, api).
+                      SEARCH_ACTIVATE_MODIFICATION: Added triggered_by parameter.
+
+    Returns:
+        A dictionary with run results including actions taken.
+        SEARCH_ACTIVATE_MODIFICATION: Added return value.
     """
-    logger.info("Starting Decision Agent for Customer: %s", customer_id)
+    # SEARCH_ACTIVATE_MODIFICATION: Initialize run logging
+    run_id = log_run_start(
+        customer_id=customer_id,
+        usecase=usecase or "GoogleAds",
+        dry_run=dry_run,
+        triggered_by=triggered_by
+    )
+    
+    # SEARCH_ACTIVATE_MODIFICATION: Clear previous actions at start of run
+    clear_actions()
+    
+    logger.info("Starting Decision Agent for Customer: %s (dry_run=%s, run_id=%s)", 
+                customer_id, dry_run, run_id)
 
     # 1. Fetch Global Instructions
     firestore_toolset = FirestoreToolset()
@@ -104,7 +141,9 @@ async def run_decision_agent(customer_id: str, usecase: Optional[str] = "GoogleA
 
     if not global_instruction:
         logger.warning("No global instructions found for customer %s. Aborting.", customer_id)
-        return
+        # SEARCH_ACTIVATE_MODIFICATION: Log run completion with no actions
+        log_run_complete(run_id, status="cancelled", summary="No global instructions found")
+        return {"run_id": run_id, "status": "cancelled", "actions": [], "dry_run": dry_run}
 
     # 2. Fetch Campaign Config
     try:
@@ -123,7 +162,9 @@ async def run_decision_agent(customer_id: str, usecase: Optional[str] = "GoogleA
 
     if not campaigns:
         logger.info("No campaigns found for customer %s.", customer_id)
-        return
+        # SEARCH_ACTIVATE_MODIFICATION: Log run completion with no actions
+        log_run_complete(run_id, status="success", summary="No campaigns configured")
+        return {"run_id": run_id, "status": "success", "actions": [], "dry_run": dry_run}
 
     logger.info("Found %s campaigns for customer %s.", len(campaigns), customer_id)
 
@@ -162,7 +203,8 @@ async def run_decision_agent(customer_id: str, usecase: Optional[str] = "GoogleA
 
         try:
             # Create a fresh agent for this campaign
-            agent = create_agent(instruction=combined_instruction)
+            # SEARCH_ACTIVATE_MODIFICATION: Pass dry_run to create_agent
+            agent = create_agent(instruction=combined_instruction, dry_run=dry_run)
 
             # Wrap in App and Runner for execution
             app = apps.App(name="decision_app", root_agent=agent)
@@ -193,6 +235,26 @@ async def run_decision_agent(customer_id: str, usecase: Optional[str] = "GoogleA
             # Continue to next campaign even if this one fails
             continue
 
-    logger.info("Completed run for Customer: %s", customer_id)
+    # SEARCH_ACTIVATE_MODIFICATION: Collect actions (unified for both dry-run and real runs)
+    actions = get_actions()
+    action_count = len(actions)
+    summary = f"Processed {len(campaigns)} campaigns"
+    if dry_run:
+        summary += f" (dry-run: {action_count} simulated actions)"
+    else:
+        summary += f" ({action_count} actions performed)"
+    
+    log_run_complete(run_id, status="success", summary=summary, actions=actions)
+    
+    logger.info("Completed run for Customer: %s (dry_run=%s, actions=%d)", 
+                customer_id, dry_run, action_count)
+    
+    return {
+        "run_id": run_id,
+        "status": "success",
+        "dry_run": dry_run,
+        "campaigns_processed": len(campaigns),
+        "actions": actions
+    }
 
 root_agent = create_agent(instruction="You are a decision agent helper.")

@@ -30,6 +30,7 @@ from google.adk import agents
 import os
 
 model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
+LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
 
 with open(os.path.join(os.path.dirname(__file__), "prompt.txt"), "r", encoding='utf-8') as f:
     prompt = f.read()
@@ -41,7 +42,7 @@ root_agent = agents.LlmAgent(
     tools=[
         GoogleAdsGetterToolset(),
         GoogleAdsUpdaterToolset(),
-        DynamicMultiAPIToolset(),
+        DynamicMultiAPIToolset(location=LOCATION),
         FirestoreToolset(),
         SA360Toolset(),
     ],

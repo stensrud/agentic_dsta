@@ -27,6 +27,8 @@ from google.ads.googleads.v22.enums.types.target_impression_share_location impor
 from agentic_dsta.tools.google_ads.google_ads_client import get_google_ads_client
 from agentic_dsta.tools.google_ads.google_ads_getter import get_google_ads_campaign_details
 from agentic_dsta.tools.google_ads.bidding_strategy_utils import validate_strategy_change
+# SEARCH_ACTIVATE_MODIFICATION: Import action logger for tracking real changes
+from agentic_dsta.core.action_logger import log_action
 import logging
 
 
@@ -320,7 +322,16 @@ def update_google_ads_bidding_strategy(
         customer_id=customer_id, operations=[campaign_op]
     )
     campaign_response = response.results[0]
-    return {"success": True, "resource_name": campaign_response.resource_name}
+    result = {"success": True, "resource_name": campaign_response.resource_name}
+    # SEARCH_ACTIVATE_MODIFICATION: Log the action for tracking
+    log_action(
+        tool_name="update_google_ads_bidding_strategy",
+        params={"customer_id": customer_id, "campaign_id": campaign_id, "strategy_type": strategy_type, "strategy_details": strategy_details},
+        description=f"Changed campaign {campaign_id} bidding strategy to {strategy_type}",
+        simulated=False,
+        result=result
+    )
+    return result
   except GoogleAdsException as ex:
 
     error_details = []
@@ -394,7 +405,16 @@ def update_google_ads_campaign_status(customer_id: str, campaign_id: str, status
             'resource_name': campaign_response.resource_name
         }
     )
-    return {"success": True, "resource_name": campaign_response.resource_name}
+    result = {"success": True, "resource_name": campaign_response.resource_name}
+    # SEARCH_ACTIVATE_MODIFICATION: Log the action for tracking
+    log_action(
+        tool_name="update_google_ads_campaign_status",
+        params={"customer_id": customer_id, "campaign_id": campaign_id, "status": status},
+        description=f"Changed campaign {campaign_id} status to {status}",
+        simulated=False,
+        result=result
+    )
+    return result
   except GoogleAdsException as ex:
     error_details = []
     for error in ex.failure.errors:
@@ -482,7 +502,16 @@ def update_google_ads_campaign_budget(
             'new_budget_micros': new_budget_micros
         }
     )
-    return {"success": True, "resource_name": budget_response.resource_name}
+    result = {"success": True, "resource_name": budget_response.resource_name}
+    # SEARCH_ACTIVATE_MODIFICATION: Log the action for tracking
+    log_action(
+        tool_name="update_google_ads_campaign_budget",
+        params={"customer_id": customer_id, "campaign_id": campaign_id, "new_budget_micros": new_budget_micros},
+        description=f"Updated campaign {campaign_id} budget to {new_budget_micros / 1000000:.2f}",
+        simulated=False,
+        result=result
+    )
+    return result
   except GoogleAdsException as ex:
     error_details = []
     for error in ex.failure.errors:
@@ -582,7 +611,16 @@ def update_google_ads_campaign_geo_targets(
     )
     # Process response
     resource_names = [r.resource_name for r in response.results]
-    return {"success": True, "resource_names": resource_names}
+    result = {"success": True, "resource_names": resource_names}
+    # SEARCH_ACTIVATE_MODIFICATION: Log the action for tracking
+    log_action(
+        tool_name="update_google_ads_campaign_geo_targets",
+        params={"customer_id": customer_id, "campaign_id": campaign_id, "location_ids": location_ids, "negative": negative},
+        description=f"Updated campaign {campaign_id} geo targets: {len(location_ids)} {'negative' if negative else 'positive'} locations",
+        simulated=False,
+        result=result
+    )
+    return result
   except GoogleAdsException as ex:
     error_details = []
     for error in ex.failure.errors:
@@ -681,7 +719,16 @@ def update_google_ads_ad_group_geo_targets(
     )
     # Process response
     resource_names = [r.resource_name for r in response.results]
-    return {"success": True, "resource_names": resource_names}
+    result = {"success": True, "resource_names": resource_names}
+    # SEARCH_ACTIVATE_MODIFICATION: Log the action for tracking
+    log_action(
+        tool_name="update_google_ads_ad_group_geo_targets",
+        params={"customer_id": customer_id, "ad_group_id": ad_group_id, "location_ids": location_ids, "negative": negative},
+        description=f"Updated ad group {ad_group_id} geo targets: {len(location_ids)} {'negative' if negative else 'positive'} locations",
+        simulated=False,
+        result=result
+    )
+    return result
   except GoogleAdsException as ex:
     error_details = []
     for error in ex.failure.errors:
@@ -748,7 +795,16 @@ def update_google_ads_shared_budget(
             'new_amount_micros': new_amount_micros
         }
     )
-    return {"success": True, "resource_name": budget_response.resource_name}
+    result = {"success": True, "resource_name": budget_response.resource_name}
+    # SEARCH_ACTIVATE_MODIFICATION: Log the action for tracking
+    log_action(
+        tool_name="update_google_ads_shared_budget",
+        params={"customer_id": customer_id, "budget_resource_name": budget_resource_name, "new_amount_micros": new_amount_micros},
+        description=f"Updated shared budget to {new_amount_micros / 1000000:.2f}",
+        simulated=False,
+        result=result
+    )
+    return result
   except GoogleAdsException as ex:
     error_details = []
     for error in ex.failure.errors:
@@ -823,7 +879,16 @@ def update_google_ads_portfolio_bidding_strategy(
         strategy_type,
         extra={'customer_id': customer_id, 'resource_name': response.results[0].resource_name}
     )
-    return {"success": True, "resource_name": response.results[0].resource_name}
+    result = {"success": True, "resource_name": response.results[0].resource_name}
+    # SEARCH_ACTIVATE_MODIFICATION: Log the action for tracking
+    log_action(
+        tool_name="update_google_ads_portfolio_bidding_strategy",
+        params={"customer_id": customer_id, "bidding_strategy_resource_name": bidding_strategy_resource_name, "strategy_type": strategy_type, "strategy_details": strategy_details},
+        description=f"Updated portfolio bidding strategy to {strategy_type}",
+        simulated=False,
+        result=result
+    )
+    return result
   except GoogleAdsException as ex:
     error_details = [str(error) for error in ex.failure.errors]
     logger.error(
